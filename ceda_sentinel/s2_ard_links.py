@@ -259,6 +259,9 @@ def image_links_to_aoi_gdf(aoi_gdf, xml_links):
 
 
 def find_image_links(aoi_gdf, start_date, end_date, base_url):
+    print("filtering S2 tiles using AOI...")
     tile_list = filter_sentinel2_tiles(aoi_gdf)
+    print("extracting xml image metadata...")
     xml_links = all_xml_list(base_url, start_date, end_date, tile_list)
+    print("joining suitable images to aoi...")
     return image_links_to_aoi_gdf(aoi_gdf, xml_links)

@@ -52,14 +52,14 @@ def plot_sample_image(gdf, link_col="image_links", sampled_rows=None):
     row_index = random_row.index[0]
 
     if row_index in sampled_rows:
-        return plot_sample_image(gdf, sampled_rows)
+        return plot_sample_image(gdf, link_col, sampled_rows)
 
     sampled_rows.add(row_index)
 
     # Get the image link (assuming it's the first link in 'image_links' column)
     window_data, prof, window = read_from_row(random_row)
     if check_no_data(window_data, prof):
-        return plot_sample_image(gdf, sampled_rows)
+        return plot_sample_image(gdf, link_col, sampled_rows)
     else:
         show(window_data)
 
@@ -71,6 +71,10 @@ def write_s2_windows_to_tif(
     aoi_id_column=None,
     band_idx_list=[1, 2, 3, 7],
 ):
+    gdf = gdf[gdf[link_col].notna()]
+    # Check if the GeoDataFrame is empty
+    if gdf.empty:
+        raise ValueError("The GeoDataFrame is empty.")
     output_folder = Path(output_folder)
     output_folder.mkdir(parents=True, exist_ok=True)
     for idx, row in gdf.iterrows():
