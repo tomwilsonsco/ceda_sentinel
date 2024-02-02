@@ -237,7 +237,7 @@ def filter_xmls_to_gdf(xml_links, cloud_cover_max=0.4):
     )
 
 
-def image_links_to_aoi_gdf(aoi_gdf, xml_links):
+def image_links_to_aoi_gdf(aoi_gdf, xml_links, cloud_cover_max=0.4):
     """Spatial join AOI polygons to corresponding CEDA images and
     add image download link as an attribute.
 
@@ -251,7 +251,7 @@ def image_links_to_aoi_gdf(aoi_gdf, xml_links):
         be NULL. If multiple matching images AOI polygons are duplicated
         for each matching image URL.
     """
-    filtered_image_gdf = filter_xmls_to_gdf(xml_links)
+    filtered_image_gdf = filter_xmls_to_gdf(xml_links, cloud_cover_max)
     return gpd.sjoin(
         aoi_gdf,
         filtered_image_gdf.to_crs(epsg=27700),
@@ -260,10 +260,10 @@ def image_links_to_aoi_gdf(aoi_gdf, xml_links):
     ).reset_index()
 
 
-def find_image_links(aoi_gdf, start_date, end_date, base_url):
+def find_image_links(aoi_gdf, start_date, end_date, base_url, cloud_cover_max=0.4):
     print("filtering S2 tiles using AOI...")
     tile_list = filter_sentinel2_tiles(aoi_gdf)
     print("extracting xml image metadata...")
     xml_links = all_xml_list(base_url, start_date, end_date, tile_list)
     print("joining suitable images to aoi...")
-    return image_links_to_aoi_gdf(aoi_gdf, xml_links)
+    return image_links_to_aoi_gdf(aoi_gdf, xml_links, cloud_cover_max)
