@@ -1,16 +1,11 @@
 import requests
+from requests.exceptions import ReadTimeout
 from bs4 import BeautifulSoup
-import re
-import lxml
+import time
 from datetime import datetime, timedelta
 from shapely.geometry import box
 from fiona.drvsupport import supported_drivers
 import geopandas as gpd
-import rasterio as rio
-from rasterio.windows import from_bounds
-from rasterio.plot import show
-from pathlib import Path
-import numpy as np
 
 
 def filter_sentinel2_tiles(aoi, tiles_layer=None):
@@ -75,9 +70,13 @@ def _get_existing_folders(base_url, start_date, end_date):
     urls = []
     while current_date <= end_date:
         check_url = _create_date_url(base_url, current_date)
-        response = requests.get(check_url, timeout=5)
-        if response.status_code == 200:
-            urls.append(check_url)
+        try:
+            response = requests.head(check_url, timeout=10)
+            if response.status_code == 200:
+                urls.append(check_url)
+        except ReadTimeout:
+            print(f"Request timed out for {check_url}. \nSkipping this date...")
+
         current_date += timedelta(days=1)
     return urls
 
@@ -152,6 +151,7 @@ def all_xml_list(base_url, start_date, end_date, tile_list=None):
     xml_links = []
     for url in date_urls:
         xml_links.extend(extract_xml_links(url, tile_list))
+        time.sleep(1)
     return xml_links
 
 
@@ -224,6 +224,8 @@ def filter_xmls_to_gdf(xml_links, cloud_cover_max=0.4):
         # If not get extent geom and append to lists
         retained_geom.append(_extract_extent(xml_extract))
         retained_links.append(url)
+        time.sleep(1)
+
 
     image_links = [
         x.replace("_meta.xml?download=1", ".tif") for x in retained_links
