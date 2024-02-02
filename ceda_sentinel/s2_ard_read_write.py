@@ -35,31 +35,19 @@ def check_no_data(window_data, prof):
     return np.all(window_data == nodata) or np.all(np.isnan(window_data))
 
 
-def plot_sample_image(gdf, link_col="image_links", sampled_rows=None):
+def plot_sample_image(gdf, link_col="image_links", plot_row=0):
     gdf = gdf[gdf[link_col].notna()]
     # Check if the GeoDataFrame is empty
     if gdf.empty:
         raise ValueError("The GeoDataFrame is empty.")
 
-    if sampled_rows is None:
-        sampled_rows = set()
-
-    if len(sampled_rows) >= len(gdf):
-        raise ValueError("All linked images are nodata only")
-
     # Select a random row
-    random_row = gdf.sample(n=1).iloc[0]
-    row_index = random_row.index[0]
-
-    if row_index in sampled_rows:
-        return plot_sample_image(gdf, link_col, sampled_rows)
-
-    sampled_rows.add(row_index)
+    current_row = gdf.iloc[plot_row]
 
     # Get the image link (assuming it's the first link in 'image_links' column)
-    window_data, prof, window = read_from_row(random_row)
+    window_data, prof, window = read_from_row(current_row)
     if check_no_data(window_data, prof):
-        return plot_sample_image(gdf, link_col, sampled_rows)
+        return plot_sample_image(gdf, link_col, plot_row + 1)
     else:
         show(window_data)
 
