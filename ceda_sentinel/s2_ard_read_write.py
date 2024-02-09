@@ -35,21 +35,28 @@ def check_no_data(window_data, prof):
     return np.all(window_data == nodata) or np.all(np.isnan(window_data))
 
 
-def plot_sample_image(gdf, link_col="image_links", plot_row=0):
-    gdf = gdf[gdf[link_col].notna()]
-    # Check if the GeoDataFrame is empty
-    if gdf.empty:
-        raise ValueError("The GeoDataFrame is empty.")
+class CedaImageGDFPlotter:
+    def __init__(self, gdf, link_col="image_links"):
+        self.gdf = gdf[gdf[link_col].notna()]
+        if self.gdf.empty:
+            raise ValueError("The GeoDataFrame is empty.")
+        self.link_col = link_col
+        self.current_row = 0
 
-    # Select a random row
-    current_row = gdf.iloc[plot_row]
+    def plot_sample_image(self):
+        # Assuming `read_from_row` and `check_no_data` are defined elsewhere
+        # and `show` is a function that plots the image
+        current_row = self.gdf.iloc[self.current_row]
+        window_data, prof, window = read_from_row(current_row)
+        if check_no_data(window_data, prof):
+            self.plot_next_row()  # Skip this row if it has no data
+        else:
+            show(window_data)  # Plot the image
 
-    # Get the image link (assuming it's the first link in 'image_links' column)
-    window_data, prof, window = read_from_row(current_row)
-    if check_no_data(window_data, prof):
-        return plot_sample_image(gdf, link_col, plot_row + 1)
-    else:
-        show(window_data)
+    def plot_next_row(self):
+        # Move to the next row; cycle back to 0 if at the last row
+        self.current_row = (self.current_row + 1) % len(self.gdf)
+        self.plot_sample_image()
 
 
 def write_s2_windows_to_tif(
