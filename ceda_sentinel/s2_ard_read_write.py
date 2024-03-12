@@ -30,9 +30,13 @@ def band_descriptions(gdf, link_col="image_links"):
     return band_names
 
 
-def check_no_data(window_data, prof):
+def check_no_data(window_data, prof, max_no_data_percent=10):
+    if window_data.size == 0:
+        return True
     nodata = prof["nodata"]
-    return np.all(window_data == nodata) or np.all(np.isnan(window_data))
+    sum_nodata = (window_data == nodata).sum()
+    percent_nd = sum_nodata / window_data.size * 100
+    return percent_nd > max_no_data_percent
 
 
 def plot_sample_image(gdf, link_col="image_links", plot_row=0):
@@ -46,7 +50,7 @@ def plot_sample_image(gdf, link_col="image_links", plot_row=0):
 
     # Get the image link (assuming it's the first link in 'image_links' column)
     window_data, prof, window = read_from_row(current_row)
-    window_data = window_data[[3, 2, 1], :, :]
+    window_data = window_data[[2, 1, 0], :, :]
     if check_no_data(window_data, prof):
         return plot_sample_image(gdf, link_col, plot_row + 1)
     else:
@@ -59,6 +63,7 @@ def write_s2_windows_to_tif(
     link_col="image_links",
     aoi_id_column=None,
     band_idx_list=[1, 2, 3, 7],
+    max_no_data_percent=10,
 ):
     gdf = gdf[gdf[link_col].notna()]
     # Check if the GeoDataFrame is empty
@@ -71,8 +76,8 @@ def write_s2_windows_to_tif(
             row, link_col=link_col, band_idx_list=band_idx_list
         )
 
-        if check_no_data(window_data, prof):
-            print(f"Skipping row {idx} as all pixels are no-data values.")
+        if check_no_data(window_data, prof, max_no_data_percent):
+            print(f"Skipping row {idx} as too many pixels are no-data values.")
             continue
 
         new_transform = rio.windows.transform(window, prof["transform"])
@@ -94,6 +99,6 @@ def write_s2_windows_to_tif(
             width=window_data.shape[2],
             height=window_data.shape[1],
         )
-        with rio.open(f"{file_name}.tif", "w", **prof) as dst:
+        with rio.open(file_name, "w", **prof) as dst:
             dst.write(window_data)
         print(f"written {file_name}")
