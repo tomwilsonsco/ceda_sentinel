@@ -13,7 +13,7 @@ from pathlib import Path
 import numpy as np
 
 
-def read_from_row(gdf_row, link_col="image_links", band_idx_list=[1, 2, 3]):
+def read_from_row(gdf_row, link_col="image_links", band_idx_list=[1, 2, 3, 7]):
     s2_link = gdf_row["image_links"]
     minx, miny, maxx, maxy = gdf_row.geometry.bounds
     with rio.open(s2_link) as src:
@@ -46,6 +46,7 @@ def plot_sample_image(gdf, link_col="image_links", plot_row=0):
 
     # Get the image link (assuming it's the first link in 'image_links' column)
     window_data, prof, window = read_from_row(current_row)
+    window_data = window_data[[3, 2, 1], :, :]
     if check_no_data(window_data, prof):
         return plot_sample_image(gdf, link_col, plot_row + 1)
     else:

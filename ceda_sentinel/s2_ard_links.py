@@ -50,9 +50,9 @@ def filter_sentinel2_tiles(aoi, tiles_layer=None):
             ),
             driver="kml",
         )
-    tile_list = gpd.sjoin(
-        tiles_layer, aoi.to_crs(epsg=4326), how="inner", predicate="intersects"
-    )["Name"].to_list()
+    tile_list = gpd.sjoin(tiles_layer, aoi.to_crs(epsg=4326), how="inner")[
+        "Name"
+    ].to_list()
     return [f"T{t}" for t in tile_list]
 
 
@@ -178,12 +178,12 @@ def _extract_extent(xml_extract):
     miny = _clean_coord(xml_extract.find("gmd:southboundlatitude").text)
     maxx = _clean_coord(xml_extract.find("gmd:eastboundlongitude").text)
     maxy = _clean_coord(xml_extract.find("gmd:northboundlatitude").text)
-    return box(minx, miny, maxy, maxy)
+    return box(minx, miny, maxx, maxy)
 
 
 def _read_xml(url):
     # Send an HTTP GET request to the URL
-    response = requests.get(url)
+    response = requests.get(url, timeout=10)
 
     # Check if the request was successful
     if response.status_code == 200:
@@ -226,10 +226,7 @@ def filter_xmls_to_gdf(xml_links, cloud_cover_max=0.4):
         retained_links.append(url)
         time.sleep(1)
 
-
-    image_links = [
-        x.replace("_meta.xml?download=1", ".tif") for x in retained_links
-    ]
+    image_links = [x.replace("_meta.xml?download=1", ".tif") for x in retained_links]
 
     return gpd.GeoDataFrame(
         {"image_links": image_links, "geometry": retained_geom},
@@ -256,7 +253,6 @@ def image_links_to_aoi_gdf(aoi_gdf, xml_links, cloud_cover_max=0.4):
         aoi_gdf,
         filtered_image_gdf.to_crs(epsg=27700),
         how="left",
-        predicate="intersects",
     ).reset_index()
 
 
