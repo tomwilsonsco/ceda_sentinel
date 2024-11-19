@@ -1,5 +1,10 @@
 # ceda_sentinel
-If using Conda or Miniconda can install the required packages into an environment named geospatial using the environment.yml included in this repository:
+Can use the docker image:
+
+```bash
+docker build . --no-cache --file .devcontainer/Dockerfile -t ceda
 ```
-conda env create -f environment.yml
+Docker image includes tk for plotting from within docker image using X11 forwarding. Therefore to run:
+```bash
+docker run --rm --gpus all -i -t -e DISPLAY -p 127.0.0.1:8888:8888 -w /app --mount type=bind,src="$(pwd)",target=/app ceda
 ```
