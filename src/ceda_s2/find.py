@@ -32,6 +32,7 @@ class FindS2:
         aoi_gdf,
         start_date,
         end_date,
+        id_col="id",
         base_url="https://data.ceda.ac.uk/neodc/sentinel_ard/data/sentinel_2",
         cloud_cover_max=20,
         s2cloudless_percent=10,
@@ -40,6 +41,7 @@ class FindS2:
         self.aoi = aoi_gdf
         self.start_date = start_date
         self.end_date = end_date
+        self.id_col = id_col
         self.base_url = base_url
         self.cloud_cover_max = cloud_cover_max
         self.s2cloudless_percent = s2cloudless_percent
@@ -155,7 +157,7 @@ class FindS2:
         xml_links = []
         for url in date_urls:
             xml_links.extend(self._extract_xml_links(url))
-            # time.sleep(random.uniform(0.01, 0.1))
+            time.sleep(random.uniform(0.01, 0.1))
         return xml_links
 
     @staticmethod
@@ -227,7 +229,7 @@ class FindS2:
 
     def _no_data_filter(self, gdf_row):
         image_link = gdf_row["image_links"]
-        if image_link is None:
+        if not isinstance(image_link, str):
             return False
         minx, miny, maxx, maxy = gdf_row.geometry.bounds
         try:
@@ -244,7 +246,7 @@ class FindS2:
 
     def _s2_cloudless_filter(self, gdf_row):
         image_link = gdf_row["image_links"]
-        if image_link is None:
+        if not isinstance(image_link, str):
             return False
         image_link = image_link.replace(
             "vmsk_sharp_rad_srefdem_stdsref.tif", "clouds.tif"
@@ -277,10 +279,9 @@ class FindS2:
         retained_links = []
         retained_geom = []
         for url in xml_links:
-            try:
-                xml_extract = self._read_xml(url)
-            except Exception as e:
-                print(f"Error reading XML from {url}: {e}")
+            xml_extract = self._read_xml(url)
+            if xml_extract is None:
+                print(f"Error reading XML from {url}")
                 continue
 
             if self._extract_xml_cloud(xml_extract) > self.cloud_cover_max:
@@ -288,7 +289,7 @@ class FindS2:
 
             retained_geom.append(self._extract_extent(xml_extract))
             retained_links.append(url)
-            # time.sleep(random.uniform(0.01, 0.1))
+            time.sleep(random.uniform(0.01, 0.1))
 
         image_links = [
             x.replace("_meta.xml?download=1", ".tif") for x in retained_links
@@ -329,6 +330,15 @@ class FindS2:
         gdf = gdf.drop_duplicates().reset_index(drop=True)
         return gdf
 
+    @staticmethod
+    def _filter_group(group):
+        # Retain rows where image_link is notna
+        non_na_rows = group[group["image_links"].notna()]
+        if not non_na_rows.empty:
+            return non_na_rows
+        else:
+            return group.head(1)
+
     def find_image_links(self):
         """
         Main method to find Sentinel-2 image links matching the given AOI, date range, and cloud cover criteria.
@@ -345,4 +355,5 @@ class FindS2:
         gdf = self._filter_images(gdf)
         if gdf[gdf["image_links"].notna()].shape[0] == 0:
             print("WARNING: No suitable cloud free images found")
+        gdf = gdf.groupby(self.id_col, group_keys=False).apply(self._filter_group)
         return gdf

@@ -1,16 +1,7 @@
-import requests
-from bs4 import BeautifulSoup
-import re
-import lxml
-from datetime import datetime, timedelta
-from shapely.geometry import box
-from fiona.drvsupport import supported_drivers
-import geopandas as gpd
 import rasterio as rio
 from rasterio.windows import from_bounds
 from rasterio.plot import show
 from pathlib import Path
-import numpy as np
 
 
 def read_from_row(gdf_row, link_col="image_links", band_idx_list=[1, 2, 3, 7]):

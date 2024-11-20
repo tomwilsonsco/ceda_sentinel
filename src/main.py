@@ -2,8 +2,10 @@ import argparse
 from pathlib import Path
 import geopandas as gpd
 import datetime
-from ceda_s2 import FindS2, ImagePlotter
+from ceda_s2 import FindS2, ImagePlotter, ImageDownloader
 import matplotlib
+
+from ceda_s2.download import ImageDownloader
 
 matplotlib.use("TkAgg")
 
@@ -17,6 +19,13 @@ def valid_date(date_string):
         )
 
 
+def compare_date(d1, d2):
+    d1 = datetime.datetime.strptime(d1, "%Y-%m-%d").date()
+    d2 = datetime.datetime.strptime(d2, "%Y-%m-%d").date()
+    if d2 <= d1:
+        raise ValueError("start date must be before end date")
+
+
 def get_images(
     features_path, start_date, end_date, plot_images, download_images, download_path
 ):
@@ -26,8 +35,12 @@ def get_images(
     image_features = s2_finder.find_image_links()
     image_count = image_features[image_features["image_links"].notna()].shape[0]
     if image_count > 0:
+        print(image_features)
         if plot_images:
             ImagePlotter(image_features)
+        if download_images:
+            downloader = ImageDownloader(image_features, download_path)
+            downloader.download_from_gdf()
     else:
         print(f"{image_count} images found")
 
@@ -98,6 +111,8 @@ def main():
     valid_date(args.start_date)
 
     valid_date(args.end_date)
+
+    compare_date(args.start_date, args.end_date)
 
     get_images(
         features_path,
