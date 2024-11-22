@@ -2,15 +2,27 @@ import argparse
 from pathlib import Path
 import geopandas as gpd
 import datetime
-from ceda_s2 import FindS2, ImagePlotter, ImageDownloader
 import matplotlib
 
-from ceda_s2.download import ImageDownloader
+from ceda_s2 import FindS2, ImagePlotter, ImageDownloader
 
-matplotlib.use("TkAgg")
+# docker needs to use tkinter
+try:
+    matplotlib.use("TkAgg")
+except (ImportError, RuntimeError):
+    matplotlib.use("Agg")
 
 
 def valid_date(date_string):
+    """
+    Validate a date string in the format YYYY-MM-DD.
+
+    Args:
+        date_string (str): The date string to validate.
+
+    Raises:
+        argparse.ArgumentTypeError: If the date string is not in the expected format.
+    """
     try:
         datetime.datetime.strptime(date_string, "%Y-%m-%d").date()
     except ValueError:
@@ -20,6 +32,16 @@ def valid_date(date_string):
 
 
 def compare_date(d1, d2):
+    """
+    Compare two date strings to ensure the start date is before the end date.
+
+    Args:
+        d1 (str): The start date in YYYY-MM-DD format.
+        d2 (str): The end date in YYYY-MM-DD format.
+
+    Raises:
+        ValueError: If the start date is not before the end date.
+    """
     d1 = datetime.datetime.strptime(d1, "%Y-%m-%d").date()
     d2 = datetime.datetime.strptime(d2, "%Y-%m-%d").date()
     if d2 <= d1:
@@ -29,6 +51,20 @@ def compare_date(d1, d2):
 def get_images(
     features_path, start_date, end_date, plot_images, download_images, download_path
 ):
+    """
+    Search for Sentinel 2 images based on provided geographical features and date range.
+
+    Args:
+        features_path (Path): Path to the file containing geographical features (GeoPackage or Shapefile).
+        start_date (str): Start date for the image search in YYYY-MM-DD format.
+        end_date (str): End date for the image search in YYYY-MM-DD format.
+        plot_images (bool): Whether to plot the images found.
+        download_images (bool): Whether to download the images found.
+        download_path (str): Path to save downloaded images.
+
+    Returns:
+        None
+    """
     search_features = gpd.read_file(features_path)
     print(f"Searching for Sentinel 2 images for {search_features.shape[0]} features...")
     s2_finder = FindS2(search_features, start_date, end_date)
@@ -47,7 +83,7 @@ def get_images(
 
 def main():
     """
-    Parse command-line arguments and start model training.
+    Parse command-line arguments and search for Sentinel images.
 
     Args:
         None
@@ -96,7 +132,7 @@ def main():
         "--download-path",
         type=str,
         default="outputs",
-        help="Path to where to save downloaded images if download flag specified.",
+        help="Path to where to save downloaded images if download flag specified. Defaults to outputs.",
     )
 
     args = parser.parse_args()

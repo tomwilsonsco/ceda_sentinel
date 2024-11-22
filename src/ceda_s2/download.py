@@ -4,6 +4,17 @@ from pathlib import Path
 
 
 class ImageDownloader:
+    """
+    Download cloud optimised geotiffs image extracts using geodataframe geometries.
+
+    Attributes:
+        gdf (GeoDataFrame): GeoDataFrame with polygon geometries and image links.
+        output_dir (Path): Directory where output images will be saved.
+        link_col (str): Name of the column in gdf containing image links.
+        band_indices (list): List of band indices to read from the images.
+        feature_col (str): Name of the column in gdf containing unique feature identifiers.
+    """
+
     def __init__(
         self,
         gdf,
@@ -12,6 +23,19 @@ class ImageDownloader:
         band_indices=(1, 2, 3),
         feature_col="id",
     ):
+        """
+        Initializes ImageDownloader with given GeoDataFrame and parameters.
+
+        Args:
+            gdf (GeoDataFrame): GeoDataFrame with polygon geometries and image links.
+            output_dir (str or Path): Directory where output images will be saved.
+            link_col (str, optional): Name of the column in gdf containing image links. Defaults to "image_links".
+            band_indices (tuple, optional): Tuple of band indices to read from the images. Defaults to (1, 2, 3).
+            feature_col (str, optional): Name of the column in gdf containing unique feature identifiers. Defaults to "id".
+
+        Raises:
+            ValueError: If feature_col is not found in gdf columns or if the GeoDataFrame is empty.
+        """
         self.gdf = gdf
         self.output_dir = Path(output_dir)
         self.link_col = link_col
@@ -26,10 +50,29 @@ class ImageDownloader:
 
     @staticmethod
     def _create_file_name(s2_link, feature_id):
+        """
+        Creates a file name for the output image based on the image link and feature ID.
+
+        Args:
+            s2_link (str): The link to the Sentinel-2 image.
+            feature_id (str or int): The unique identifier for the feature.
+
+        Returns:
+            str: The generated file name.
+        """
         file_name = s2_link.split("/")[-1]
         return f"fid{feature_id}_{file_name}"
 
     def _read_from_row(self, gdf_row):
+        """
+        Reads image data for a given row from the GeoDataFrame.
+
+        Args:
+            gdf_row (GeoDataFrame row): A row from the GeoDataFrame containing feature geometry and image link.
+
+        Returns:
+            tuple: A tuple containing the file name, window data, profile, and window object.
+        """
         s2_link = gdf_row[self.link_col]
         feature_id = gdf_row[self.feature_col]
         file_name = self._create_file_name(s2_link, feature_id)
@@ -41,6 +84,15 @@ class ImageDownloader:
         return file_name, window_data, prof, window
 
     def _write_window(self, file_name, window_data, prof, window):
+        """
+        Writes the image data for a given window to an output file.
+
+        Args:
+            file_name (str): The name of the output file.
+            window_data (numpy array): The image data for the window.
+            prof (dict): The profile metadata for the image.
+            window (Window): The window object representing the bounds of the data.
+        """
         output_file = self.output_dir / file_name
         new_transform = rio.windows.transform(window, prof["transform"])
         prof.update(
@@ -54,5 +106,8 @@ class ImageDownloader:
             print(f"written {output_file}")
 
     def download_from_gdf(self):
+        """
+        Downloads image data for all features in the GeoDataFrame and saves them to the output directory.
+        """
         for i, row in self.gdf.iterrows():
             self._write_window(*self._read_from_row(row))

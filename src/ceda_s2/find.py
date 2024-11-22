@@ -1,5 +1,4 @@
 from logging import WARNING
-
 import requests
 from requests.exceptions import ReadTimeout
 from bs4 import BeautifulSoup
@@ -12,6 +11,7 @@ import geopandas as gpd
 import rasterio as rio
 from rasterio.windows import from_bounds
 import numpy as np
+import re
 
 
 class FindS2:
@@ -38,6 +38,19 @@ class FindS2:
         s2cloudless_percent=10,
         nodata_percent=10,
     ):
+        """
+        Initializes the FindS2 class with the given parameters.
+
+        Args:
+            aoi_gdf (GeoDataFrame): Area of Interest as a GeoDataFrame.
+            start_date (str): Start date for the imagery search in "YYYY-MM-DD" format.
+            end_date (str): End date for the imagery search in "YYYY-MM-DD" format.
+            id_col (str): Column name representing unique IDs in AOI GeoDataFrame.
+            base_url (str): Base URL for Sentinel-2 data.
+            cloud_cover_max (float): Maximum allowable cloud cover percentage.
+            s2cloudless_percent (float): Maximum allowable cloud cover percentage for S2 cloudless filter.
+            nodata_percent (float): Maximum allowable nodata percentage in an image.
+        """
         self.aoi = aoi_gdf
         self.start_date = start_date
         self.end_date = end_date
@@ -223,11 +236,26 @@ class FindS2:
         Returns:
             BeautifulSoup: Parsed XML data.
         """
-        response = requests.get(url, timeout=10)
-        if response.status_code == 200:
-            return BeautifulSoup(response.text, "lxml")
+        try:
+            response = requests.get(url, timeout=10)
+            if response.status_code == 200:
+                return BeautifulSoup(response.text, "lxml")
+            else:
+                print(f"Error: Received status code {response.status_code} for {url}")
+        except (requests.exceptions.RequestException, requests.exceptions.Timeout) as e:
+            print(f"Error reading XML from {url}: {e}")
+        return None
 
     def _no_data_filter(self, gdf_row):
+        """
+        Filters out images with too much nodata based on the specified percentage threshold.
+
+        Args:
+            gdf_row (GeoDataFrame row): Row of the GeoDataFrame representing an image.
+
+        Returns:
+            bool: True if the nodata percentage exceeds the threshold, False otherwise.
+        """
         image_link = gdf_row["image_links"]
         if not isinstance(image_link, str):
             return False
@@ -245,6 +273,15 @@ class FindS2:
             return False
 
     def _s2_cloudless_filter(self, gdf_row):
+        """
+        Filters out images with too much cloud cover based on the S2 cloudless product.
+
+        Args:
+            gdf_row (GeoDataFrame row): Row of the GeoDataFrame representing an image.
+
+        Returns:
+            bool: True if the cloud cover percentage exceeds the threshold, False otherwise.
+        """
         image_link = gdf_row["image_links"]
         if not isinstance(image_link, str):
             return False
@@ -264,6 +301,31 @@ class FindS2:
             print(f"Cannot open cloud mask image {e}")
             return False
 
+    @staticmethod
+    def _extract_date_from_link(gdf_row):
+        """
+        Extracts a date string from the given file name.
+
+        Args:
+            file_name (str): The name of the file containing a date.
+
+        Returns:
+            str: The formatted date string (YYYY-MM-DD) if found, otherwise None.
+        """
+        if gdf_row["image_links"] is None:
+            return None
+        else:
+            s2_link = gdf_row["image_links"]
+
+        file_name = s2_link.split("/")[-1]
+        try:
+            date_str = re.search(r"_(\d{8})_", file_name).group(1)
+            formatted_date = f"{date_str[:4]}-{date_str[4:6]}-{date_str[6:]}"
+            return formatted_date
+        except Exception as e:
+            print(f"Error extracting date from {file_name}: {e}")
+            return None
+
     def _filter_xmls_to_gdf(self, xml_links):
         """
         Filters a list of Sentinel-2 XML links based on cloud cover and creates a
@@ -281,7 +343,6 @@ class FindS2:
         for url in xml_links:
             xml_extract = self._read_xml(url)
             if xml_extract is None:
-                print(f"Error reading XML from {url}")
                 continue
 
             if self._extract_xml_cloud(xml_extract) > self.cloud_cover_max:
@@ -294,8 +355,6 @@ class FindS2:
         image_links = [
             x.replace("_meta.xml?download=1", ".tif") for x in retained_links
         ]
-
-        # s2 cloudless
 
         return gpd.GeoDataFrame(
             {"image_links": image_links, "geometry": retained_geom},
@@ -323,16 +382,34 @@ class FindS2:
         ).reset_index()
 
     def _filter_images(self, gdf):
+        """
+        Applies nodata and S2 cloudless filters to the GeoDataFrame to remove unsuitable images.
+
+        Args:
+            gdf (GeoDataFrame): A GeoDataFrame of AOI polygons with corresponding image links.
+
+        Returns:
+            GeoDataFrame: The filtered GeoDataFrame with unsuitable images removed.
+        """
         print("applying nodata filter...")
         gdf.loc[gdf.apply(self._no_data_filter, axis=1), "image_links"] = None
         print("applying s2cloudless filter...")
         gdf.loc[gdf.apply(self._s2_cloudless_filter, axis=1), "image_links"] = None
         gdf = gdf.drop_duplicates().reset_index(drop=True)
+        gdf["image_date"] = gdf.apply(self._extract_date_from_link, axis=1)
         return gdf
 
     @staticmethod
     def _filter_group(group):
-        # Retain rows where image_link is notna
+        """
+        Filters a group of rows to retain only the rows with image links available.
+
+        Args:
+            group (DataFrameGroupBy object): Grouped DataFrame rows.
+
+        Returns:
+            DataFrame: The filtered group of rows.
+        """
         non_na_rows = group[group["image_links"].notna()]
         if not non_na_rows.empty:
             return non_na_rows
@@ -354,6 +431,10 @@ class FindS2:
         gdf = self._image_links_to_aoi_gdf(xml_links)
         gdf = self._filter_images(gdf)
         if gdf[gdf["image_links"].notna()].shape[0] == 0:
-            print("WARNING: No suitable cloud free images found")
+            print(WARNING, "No suitable cloud free images found")
+        # keep all image links rows or one row per feature if no images found
         gdf = gdf.groupby(self.id_col, group_keys=False).apply(self._filter_group)
+        gdf = gdf.sort_values(by=[self.id_col, "image_date"], ascending=True)
+        gdf = gdf.reset_index(drop=True)
         return gdf
+
