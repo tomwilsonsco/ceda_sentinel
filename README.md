@@ -1,4 +1,25 @@
 # ceda_sentinel
+Search and download 
+
+## Process overview
+This repository is designed to use input features (shapefile or geopackage) to search for Sentinel 2 images over the UK from 
+the analysis ready Sentinel 2 images available on 
+the [CEDA archive](https://data.ceda.ac.uk/neodc/sentinel_ard/data/sentinel_2). 
+
+The Python package in this repository `src/ceda_s2` contains classes to search for images, to plot them for visual inspection 
+and to download them as geotiff files. 
+
+The CEDA images are [cloud optimised geotiffs](https://cogeo.org/) and this allows the processes created in 
+this repository to download subsections of image tiles intersecting input features directly from their online storage, rather 
+than downloading huge whole image tiles. This saves space and can be particularly useful if extracting images to prepare a training dataset for deep learning methods 
+such as UNET.
+
+The process initially extracts links to suitable images for each input feature. These links are recorded in a column in the 
+input search shapefile or geopackage. The process checks the image is not mostly nodata or cloud covered to ensure only 
+usable images are recorded against the search features. 
+
+The image sections covering each feature can then be plotted (an interactive plot window allows 
+to scroll through each search result as RGB true colour images) or downloaded as geotiffs.
 
 ## Setup
 Either use Docker as described below or install packages from the requirements.txt:
@@ -6,18 +27,6 @@ Either use Docker as described below or install packages from the requirements.t
 ```bash
 pip install --requirement requirements.txt
 ```
-## Process overview
-This repository is designed to use input features (shapefile or geopackage) to search for Sentinel 2 images over the UK from 
-the analysis ready Sentinel 2 images available on 
-the [CEDA archive](https://data.ceda.ac.uk/neodc/sentinel_ard/data/sentinel_2). 
-
-The Python package in this repository `src/ceda_s2` contains classes to search for images, to plot them for visual inspection 
-and to download them as tif files. 
-
-The CEDA images are [cloud optimised geotiffs](https://cogeo.org/) and this allows the processes created in 
-this repository to download subsections of image tiles intersecting input features, rather than whole image tiles. This 
-saves space and can be particularly useful if extracting images to prepare a training dataset for deep learning methods 
-such as UNET.
 
 ## How to run
 The easiest way to extract images  via `src/main.py`. For example with a geopackage of search features stored in the inputs 
