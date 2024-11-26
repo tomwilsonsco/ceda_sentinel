@@ -48,14 +48,39 @@ def compare_date(d1, d2):
         raise ValueError("start date must be before end date")
 
 
+def _save_features_path(features_path, start_date, end_date):
+    """
+    Generate a new file path for saving search features results.
+
+    Args:
+        features_path (Path): The original file path as a `pathlib.Path` object.
+        start_date (str): The start date of the search (e.g., "2023-01-01").
+        end_date (str): The end date of the search (e.g., "2023-12-31").
+
+    Returns:
+        Path: A new file path with a modified name including the start and end dates.
+    """
+    extn = features_path.suffix
+    stem_name = features_path.stem
+    output_name = f"{stem_name}_s2_search_{start_date}_{end_date}{extn}"
+    return features_path.parent / output_name
+
+
 def get_images(
-    features_path, start_date, end_date, plot_images, download_images, download_path
+    features_path,
+    new_search,
+    start_date,
+    end_date,
+    plot_images,
+    download_images,
+    download_path,
 ):
     """
     Search for Sentinel 2 images based on provided geographical features and date range.
 
     Args:
         features_path (Path): Path to the file containing geographical features (GeoPackage or Shapefile).
+        new_search (bool): Whether a new search or using image links in existing image_link column.
         start_date (str): Start date for the image search in YYYY-MM-DD format.
         end_date (str): End date for the image search in YYYY-MM-DD format.
         plot_images (bool): Whether to plot the images found.
@@ -66,17 +91,37 @@ def get_images(
         None
     """
     search_features = gpd.read_file(features_path)
-    print(f"Searching for Sentinel 2 images for {search_features.shape[0]} features...")
-    s2_finder = FindS2(search_features, start_date, end_date)
-    image_features = s2_finder.find_image_links()
-    image_count = image_features[image_features["image_links"].notna()].shape[0]
+    if new_search:
+        if "image_link" in search_features.columns:
+            search_features = search_features.drop(columns=["image_link", "image_date"])
+            search_features = search_features[~search_features.geometry.duplicated()]
+        print(
+            f"Searching for Sentinel 2 images for {search_features.shape[0]} features..."
+        )
+        s2_finder = FindS2(search_features, start_date, end_date)
+        image_features = s2_finder.find_image_links()
+    else:
+        print(
+            "Search features have existing 'image_link' column values, so using these..."
+        )
+        if not plot_images and not download_images:
+            raise ValueError(
+                "Need to specify 'plot' or 'download' arguments to use existing image links."
+            )
+        image_features = search_features
+
+    image_count = image_features[image_features["image_link"].notna()].shape[0]
     if image_count > 0:
-        print(image_features)
+        if new_search:
+            save_path = _save_features_path(features_path, start_date, end_date)
+            image_features.to_file(save_path)
+            print(f"saved search results to {save_path}")
         if plot_images:
             ImagePlotter(image_features)
         if download_images:
             downloader = ImageDownloader(image_features, download_path)
             downloader.download_from_gdf()
+
     else:
         print(f"{image_count} images found")
 
@@ -99,20 +144,19 @@ def main():
         "--search-features",
         type=str,
         required=True,
-        help="Path to gpkg or shp containing features to search",
+        help="Path to gpkg or shp containing features to search. If already includes image_link field\
+             then will not run new search but can plot or download these image links depending on arguments specified",
     )
 
     parser.add_argument(
         "--start-date",
         type=str,
-        required=True,
         help="Start date to search for images in YYYY-MM-DD format",
     )
 
     parser.add_argument(
         "--end-date",
         type=str,
-        required=True,
         help="End date to search for images in YYYY-MM-DD format",
     )
 
@@ -126,6 +170,12 @@ def main():
         "--download",
         action="store_true",
         help="Download the images found as geotiffs.",
+    )
+
+    parser.add_argument(
+        "--overwrite-search",
+        action="store_true",
+        help="If existing image_link column in search features don't use it and search again.",
     )
 
     parser.add_argument(
@@ -144,14 +194,27 @@ def main():
     if not features_path.exists():
         raise FileNotFoundError("Search features path does not exist.")
 
-    valid_date(args.start_date)
+    search_features = gpd.read_file(features_path)
+    new_search = (
+        "image_link" not in search_features.columns
+        or search_features["image_link"].isna().all()
+        or args.overwrite_search
+    )
+    if new_search:
+        if args.start_date is None or args.end_date is None:
+            raise ValueError(
+                "For a new search must specify start-date and end-date arguments."
+            )
 
-    valid_date(args.end_date)
+        valid_date(args.start_date)
 
-    compare_date(args.start_date, args.end_date)
+        valid_date(args.end_date)
+
+        compare_date(args.start_date, args.end_date)
 
     get_images(
         features_path,
+        new_search,
         args.start_date,
         args.end_date,
         args.plot,

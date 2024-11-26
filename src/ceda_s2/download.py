@@ -19,7 +19,7 @@ class ImageDownloader:
         self,
         gdf,
         output_dir,
-        link_col="image_links",
+        link_col="image_link",
         band_indices=(1, 2, 3),
         feature_col="id",
     ):

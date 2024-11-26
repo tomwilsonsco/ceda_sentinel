@@ -22,8 +22,15 @@ class ImagePlotter:
         ax_next (Axes): Matplotlib axis for the next button.
         btn_next (Button): Button widget to display the next image.
     """
+
     def __init__(
-            self, gdf, link_col="image_links", band_indices=(1, 2, 3), feature_col="id", plot_geom=True, geom_buffer=100,
+        self,
+        gdf,
+        link_col="image_link",
+        band_indices=(1, 2, 3),
+        feature_col="id",
+        plot_geom=True,
+        geom_buffer=100,
     ):
         """
         Initializes the ImagePlotter with a GeoDataFrame and required settings.
@@ -43,7 +50,7 @@ class ImagePlotter:
         self.link_col = link_col
         self.band_indices = list(band_indices)
         self.feature_col = feature_col
-        self.plot_geom = plot_geom,
+        self.plot_geom = (plot_geom,)
         self.geom_buffer = geom_buffer
         self.normalise_min = 0
         self.normalise_max = 150
@@ -104,7 +111,6 @@ class ImagePlotter:
         window_data = np.where(window_data > maxv, maxv, window_data)
         return (window_data - minv) / (maxv - minv)
 
-
     def _read_from_row(self, gdf_row):
         """
         Reads image data and metadata from the given GeoDataFrame row.
@@ -137,7 +143,9 @@ class ImagePlotter:
             self.plot_row = len(self.gdf) - 1
 
         current_row = self.gdf.iloc[self.plot_row]
-        window_data, win_transform, window, plot_title = self._read_from_row(current_row)
+        window_data, win_transform, window, plot_title = self._read_from_row(
+            current_row
+        )
 
         # Assuming RGB ordering is [2, 1, 0]
         if len(window_data.shape) == 3 and window_data.shape[0] >= 3:
@@ -147,7 +155,7 @@ class ImagePlotter:
             self.ax.set_title(f"{plot_title}")
             if self.plot_geom:
                 gpd.GeoSeries([current_row.geometry]).boundary.plot(
-                ax=self.ax, color='red', linewidth=2
+                    ax=self.ax, color="red", linewidth=2
                 )
 
             plt.draw()

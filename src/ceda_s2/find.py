@@ -256,7 +256,7 @@ class FindS2:
         Returns:
             bool: True if the nodata percentage exceeds the threshold, False otherwise.
         """
-        image_link = gdf_row["image_links"]
+        image_link = gdf_row["image_link"]
         if not isinstance(image_link, str):
             return False
         minx, miny, maxx, maxy = gdf_row.geometry.bounds
@@ -282,7 +282,7 @@ class FindS2:
         Returns:
             bool: True if the cloud cover percentage exceeds the threshold, False otherwise.
         """
-        image_link = gdf_row["image_links"]
+        image_link = gdf_row["image_link"]
         if not isinstance(image_link, str):
             return False
         image_link = image_link.replace(
@@ -312,10 +312,10 @@ class FindS2:
         Returns:
             str: The formatted date string (YYYY-MM-DD) if found, otherwise None.
         """
-        if gdf_row["image_links"] is None:
+        if gdf_row["image_link"] is None:
             return None
         else:
-            s2_link = gdf_row["image_links"]
+            s2_link = gdf_row["image_link"]
 
         file_name = s2_link.split("/")[-1]
         try:
@@ -335,7 +335,7 @@ class FindS2:
             xml_links (list of str): List of links to Sentinel-2 XML files.
 
         Returns:
-            GeoDataFrame: A GeoDataFrame with 'image_links' for TIFF image URLs
+            GeoDataFrame: A GeoDataFrame with 'image_link' for TIFF image URLs
             and 'geometry' of image extents.
         """
         retained_links = []
@@ -357,7 +357,7 @@ class FindS2:
         ]
 
         return gpd.GeoDataFrame(
-            {"image_links": image_links, "geometry": retained_geom},
+            {"image_link": image_links, "geometry": retained_geom},
             crs="epsg:4386",
         )
 
@@ -392,9 +392,9 @@ class FindS2:
             GeoDataFrame: The filtered GeoDataFrame with unsuitable images removed.
         """
         print("applying nodata filter...")
-        gdf.loc[gdf.apply(self._no_data_filter, axis=1), "image_links"] = None
+        gdf.loc[gdf.apply(self._no_data_filter, axis=1), "image_link"] = None
         print("applying s2cloudless filter...")
-        gdf.loc[gdf.apply(self._s2_cloudless_filter, axis=1), "image_links"] = None
+        gdf.loc[gdf.apply(self._s2_cloudless_filter, axis=1), "image_link"] = None
         gdf = gdf.drop_duplicates().reset_index(drop=True)
         gdf["image_date"] = gdf.apply(self._extract_date_from_link, axis=1)
         return gdf
@@ -410,7 +410,7 @@ class FindS2:
         Returns:
             DataFrame: The filtered group of rows.
         """
-        non_na_rows = group[group["image_links"].notna()]
+        non_na_rows = group[group["image_link"].notna()]
         if not non_na_rows.empty:
             return non_na_rows
         else:
@@ -430,11 +430,11 @@ class FindS2:
         print("joining suitable images to features...")
         gdf = self._image_links_to_aoi_gdf(xml_links)
         gdf = self._filter_images(gdf)
-        if gdf[gdf["image_links"].notna()].shape[0] == 0:
+        if gdf[gdf["image_link"].notna()].shape[0] == 0:
             print(WARNING, "No suitable cloud free images found")
         # keep all image links rows or one row per feature if no images found
         gdf = gdf.groupby(self.id_col, group_keys=False).apply(self._filter_group)
         gdf = gdf.sort_values(by=[self.id_col, "image_date"], ascending=True)
         gdf = gdf.reset_index(drop=True)
-        return gdf
-
+        columns = list(self.aoi.columns) + ["image_link", "image_date"]
+        return gdf[columns]
