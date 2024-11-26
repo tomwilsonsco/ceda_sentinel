@@ -1,25 +1,22 @@
-# ceda_sentinel
-Search and download 
-
+# CEDA Sentinel
 ## Process overview
-This repository is designed to use input features (shapefile or geopackage) to search for Sentinel 2 images over the UK from 
-the analysis ready Sentinel 2 images available on 
-the [CEDA archive](https://data.ceda.ac.uk/neodc/sentinel_ard/data/sentinel_2). 
+This repository is designed to use input features (shapefile or geopackage) to extract Sentinel 2 imagery over the UK from 
+the analysis ready Sentinel 2 images available on the [CEDA archive](https://data.ceda.ac.uk/neodc/sentinel_ard/data/sentinel_2). 
 
 The Python package in this repository `src/ceda_s2` contains classes to search for images, to plot them for visual inspection 
 and to download them as geotiff files. 
 
 The CEDA images are [cloud optimised geotiffs](https://cogeo.org/) and this allows the processes created in 
 this repository to download subsections of image tiles intersecting input features directly from their online storage, rather 
-than downloading huge whole image tiles. This saves space and can be particularly useful if extracting images to prepare a training dataset for deep learning methods 
-such as UNET.
+than downloading large whole image tiles. This saves space and can be particularly useful if extracting images to prepare a 
+training dataset for deep learning methods such as UNET.
 
 The process initially extracts links to suitable images for each input feature. These links are recorded in a column in the 
-input search shapefile or geopackage. The process checks the image is not mostly nodata or cloud covered to ensure only 
-usable images are recorded against the search features. 
+in a copy of the input search shapefile or geopackage. The process checks the image is not mostly nodata or cloud covered to 
+ensure only usable images are recorded against the search features. 
 
-The image sections covering each feature can then be plotted (an interactive plot window allows 
-to scroll through each search result as RGB true colour images) or downloaded as geotiffs.
+Once the search is complete, images covering each feature can be plotted (an interactive plot window allows 
+to scroll through each search result as RGB true colour images), and/or downloaded as geotiffs.
 
 ## Setup
 Either use Docker as described below or install packages from the requirements.txt:
@@ -29,8 +26,8 @@ pip install --requirement requirements.txt
 ```
 
 ## How to run
-The easiest way to extract images  via `src/main.py`. For example with a geopackage of search features stored in the inputs 
-directory of this repository:
+The easiest way to extract images is by running `src/main.py`.  
+For example with a geopackage of search features stored in the inputs directory of this repository:
 
 ```bash
 python src/main.py --search-features inputs/test_search.gpkg \
@@ -46,9 +43,10 @@ The above will:
 Note the search is one to many, so the number of features will often be greater in the output layer if the search finds 
 multiple suitable images for a feature within the specified date range.
 
-Various other arguments can be used to control the behaviour of `src/main.py` process. For example can just search 
-initially (by omitting `--plot` and `--download` arguments) and then plot or download later by specifying the resulting search 
-result shapefile (or geopackage) as input to the same process.
+Various other arguments can be used to control the behaviour of the `src/main.py` process. For example can just search 
+initially without any plotting or downloading (by including `--start-date`, `--end-date` but not `--plot` and 
+`--download` arguments). Can then plot or download later by specifying the resulting search result shapefile (or geopackage) 
+as `--search-features` (and this time can omit the start and end dates as it will use existing image links found by default).
 
 To see all the options:
 ```bash
