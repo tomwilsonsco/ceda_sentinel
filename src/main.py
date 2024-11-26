@@ -138,26 +138,27 @@ def main():
     """
     # Parse command-line arguments
     parser = argparse.ArgumentParser(
-        description="Find Sentinel images from CEDA analysis-ready archive."
+        description="Find Sentinel 2 images intersecting search features from the CEDA analysis-ready archive."
     )
     parser.add_argument(
         "--search-features",
         type=str,
         required=True,
-        help="Path to gpkg or shp containing features to search. If already includes image_link field\
-             then will not run new search but can plot or download these image links depending on arguments specified",
+        help="Path to gpkg or shp containing features to search. If input already includes image_link field \
+             then need to specify `overwrite-search` argument to run a new search, or can plot or download \
+             the existing image links depending on arguments specified.",
     )
 
     parser.add_argument(
         "--start-date",
         type=str,
-        help="Start date to search for images in YYYY-MM-DD format",
+        help="Start date to search for images in YYYY-MM-DD format.",
     )
 
     parser.add_argument(
         "--end-date",
         type=str,
-        help="End date to search for images in YYYY-MM-DD format",
+        help="End date to search for images in YYYY-MM-DD format.",
     )
 
     parser.add_argument(
@@ -175,7 +176,7 @@ def main():
     parser.add_argument(
         "--overwrite-search",
         action="store_true",
-        help="If existing image_link column in search features don't use it and search again.",
+        help="If existing image_link column in search features ignore, search again and overwrite.",
     )
 
     parser.add_argument(
