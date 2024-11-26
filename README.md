@@ -6,29 +6,26 @@ Either use Docker as described below or install packages from the requirements.t
 ```bash
 pip install --requirement requirements.txt
 ```
+## Process overview
+This repository is designed to use input features (shapefile or geopackage) to search for Sentinel 2 images over the UK from 
+the analysis ready Sentinel 2 images available on 
+the [CEDA archive](https://data.ceda.ac.uk/neodc/sentinel_ard/data/sentinel_2). 
 
-## Docker
-Can use the docker image:
+The Python package in this repository `src/ceda_s2` contains classes to search for images, to plot them for visual inspection 
+and to download them as tif files. 
 
-```bash
-docker build . --no-cache --file .devcontainer/Dockerfile -t ceda
-```
-Docker image includes tk for plotting from within docker image using X11 forwarding. Therefore to run:
-```bash
- docker run --rm -i -t -e DISPLAY=$DISPLAY -v /tmp/.X11-unix:/tmp/.X11-unix -p 127.0.0.1:8888:8888 -w /app --mount type=bind,src="$(pwd)",target=/app ceda
-```
-# How to run
-This repository is designed to search for Sentinel 2 images over the UK from the analysis ready data available on the CEDA 
-archive. 
+The CEDA images are [cloud optimised geotiffs](https://cogeo.org/) and this allows the processes created in 
+this repository to download subsections of image tiles intersecting input features, rather than whole image tiles. This 
+saves space and can be particularly useful if extracting images to prepare a training dataset for deep learning methods 
+such as UNET.
 
-A python package in this repository `src/ceda_s2` contains classes to search for images, to plot them and to download them as 
-tif files.
-
-The easiest way to run them is via `src/main.py`. For example with a shapefile of features wish to find and download images 
-for stored in the inputs directory of this repository:
+## How to run
+The easiest way to extract images  via `src/main.py`. For example with a geopackage of search features stored in the inputs 
+directory of this repository:
 
 ```bash
-python src/main.py --search-features inputs/test_search.gpkg --start-date 2024-04-01 --end-date 2024-05-31 --plot --download
+python src/main.py --search-features inputs/test_search.gpkg \
+--start-date 2024-04-01 --end-date 2024-05-31 --plot --download
 ```
 The above will:
 - Search for suitable cloud free images for each feature within the specified date range.
@@ -37,13 +34,26 @@ The above will:
 - Download the images to the outputs directory.
 - Save a copy of the input shapefile or geopackage with a new field of image links and dates.
 
-Note the search is one to many, so the number of features will likely be greater in the output layer if the search finds 
-multiple images for a feature.
+Note the search is one to many, so the number of features will often be greater in the output layer if the search finds 
+multiple suitable images for a feature within the specified date range.
 
-Various other arguments can be used to control the behaviour of `src/main.py` process. For example can search initially and 
-then download or plot later by specifying the resulting search result shapefile (or geopackage) as input.
+Various other arguments can be used to control the behaviour of `src/main.py` process. For example can just search 
+initially (by omitting `--plot` and `--download` arguments) and then plot or download later by specifying the resulting search 
+result shapefile (or geopackage) as input to the same process.
 
-To see the options:
+To see all the options:
 ```bash
 python src/main.py -h
+```
+## Docker
+Can use the docker image. In a terminal `cd` to the repository and then run:
+
+```bash
+docker build . --no-cache --file .devcontainer/Dockerfile -t ceda
+```
+The Docker image built from the `devcontainer/Dockerfile` includes tk for plotting from within the docker image using X11
+forwarding. When start the container need to include this:
+```bash
+ docker run --rm -i -t -e DISPLAY=$DISPLAY -v /tmp/.X11-unix:/tmp/.X11-unix \
+ -p 127.0.0.1:8888:8888 -w /app --mount type=bind,src="$(pwd)",target=/app ceda
 ```
