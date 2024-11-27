@@ -65,7 +65,8 @@ class FindS2:
         """
         Filters Sentinel-2 satellite tiles based on the given AOI.
 
-        This function intersects the input AOI with a layer of Sentinel-2 tiles. The default layer is sourced from an ESA KML file.
+        This function intersects the input AOI with a layer of Sentinel-2 tiles.
+        The default layer is sourced from an ESA KML file.
 
         Returns:
             None: Updates `tile_list` with the names of intersecting tiles.
@@ -131,7 +132,8 @@ class FindS2:
         """
         Extracts XML file links from a specified HTML webpage URL.
 
-        Sends a GET request to the provided URL, parses the HTML content, and extracts all links that end with '.xml?download=1'.
+        Sends a GET request to the provided URL, parses the HTML content, and extracts all
+        links that end with '.xml?download=1'.
         If `tile_list` is available, only extracts links containing specified tiles.
 
         Args:
@@ -159,9 +161,11 @@ class FindS2:
 
     def all_xml_list(self):
         """
-        Gathers all XML file links from a range of URLs constructed based on a base CEDA URL and a date range.
+        Gathers all XML file links from a range of URLs constructed based on a
+        base CEDA URL and a date range.
 
-        Extracts XML links from each generated URL within the date range. Filters links based on provided tiles if available.
+        Extracts XML links from each generated URL within the date range. Filters links based on provided
+        tiles if available.
 
         Returns:
             list: A list of all extracted XML file links across the specified date range.
@@ -187,7 +191,7 @@ class FindS2:
         supp = xml_extract.find("gmd:supplementalinformation")
         character_string = supp.find("gco:characterstring").text
         lines = character_string.split("\n")
-        lines = ["".join(l.split()) for l in lines]
+        lines = ["".join(aline.split()) for aline in lines]
         for line in lines:
             if line.startswith("ARCSI_CLOUD_COVER"):
                 arcsi_cloud_cover = line.split(":")[1].strip()

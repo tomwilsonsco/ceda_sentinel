@@ -74,6 +74,7 @@ def get_images(
     plot_images,
     download_images,
     download_path,
+    band_indices,
 ):
     """
     Search for Sentinel 2 images based on provided geographical features and date range.
@@ -86,6 +87,8 @@ def get_images(
         plot_images (bool): Whether to plot the images found.
         download_images (bool): Whether to download the images found.
         download_path (str): Path to save downloaded images.
+        band_indices (tuple): Tuple of band indices to write when downloading. NOTE: This is rasterio 1-indexed order,
+        not 0 indexed.
 
     Returns:
         None
@@ -119,7 +122,9 @@ def get_images(
         if plot_images:
             ImagePlotter(image_features)
         if download_images:
-            downloader = ImageDownloader(image_features, download_path)
+            downloader = ImageDownloader(
+                image_features, download_path, band_indices=band_indices
+            )
             downloader.download_from_gdf()
 
     else:
@@ -186,6 +191,16 @@ def main():
         help="Path to where to save downloaded images if download flag specified. Defaults to outputs.",
     )
 
+    parser.add_argument(
+        "--download-band-indices",
+        nargs="+",
+        type=int,
+        default=[1, 2, 3, 7],
+        help="Indices of the bands wish to download from Sentinel 2 image. \
+                        Uses 1-indexed Rasterio values and defaults to B,G,R,NiR using [1,2,3,7].\
+                        Specify as space separated numbers e.g. '--download-band-indices 1 2 3'",
+    )
+
     args = parser.parse_args()
 
     # Convert paths to Pathlib objects
@@ -213,6 +228,11 @@ def main():
 
         compare_date(args.start_date, args.end_date)
 
+    band_indices = tuple(args.download_band_indices)
+    if band_indices:
+        if not all(0 < x <= 10 for x in band_indices):
+            raise ValueError("Band index values must be in the range 1-10.")
+
     get_images(
         features_path,
         new_search,
@@ -221,6 +241,7 @@ def main():
         args.plot,
         args.download,
         args.download_path,
+        band_indices,
     )
 
 
