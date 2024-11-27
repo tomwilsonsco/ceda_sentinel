@@ -43,10 +43,11 @@ The above will:
 Note the search is one to many, so the number of features will often be greater in the output layer if the search finds 
 multiple suitable images for a feature within the specified date range.
 
-Various other arguments can be used to control the behaviour of the `src/main.py` process. For example can just search 
-initially without any plotting or downloading (by including `--start-date`, `--end-date` but not `--plot` and 
-`--download` arguments). Can then plot or download later by specifying the resulting search result shapefile (or geopackage) 
-as `--search-features` (and this time can omit the start and end dates as it will use existing image links found by default).
+Various other arguments can be used to control the behaviour of the `src/main.py` process. For example, you can just search 
+initially without any plotting or downloading (by including `--start-date`, `--end-date`, but not `--plot` and 
+`--download` arguments). You can then plot or download later by specifying the search result shapefile (or 
+geopackage) as `--search-features` (and this time can omit the start and end dates as it will use existing image links 
+found by default).
 
 To see all the options:
 ```bash
