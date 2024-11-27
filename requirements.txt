@@ -1,0 +1,15 @@
+numpy
+pandas
+requests
+rasterio
+geopandas
+black
+flake8
+pytest
+pytest-cov
+codecov
+bs4
+lxml
+ipykernel
+matplotlib
+fiona

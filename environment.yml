@@ -1,9 +1,0 @@
-name: geospatial
-channels:
-  - defaults
-dependencies:
-  - rasterio
-  - geopandas
-  - bs4
-  - lxml
-  - ipykernel
