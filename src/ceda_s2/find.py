@@ -316,7 +316,7 @@ class FindS2:
         Returns:
             str: The formatted date string (YYYY-MM-DD) if found, otherwise None.
         """
-        if gdf_row["image_link"] is None:
+        if not isinstance(gdf_row["image_link"], str):
             return None
         else:
             s2_link = gdf_row["image_link"]
