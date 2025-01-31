@@ -56,6 +56,7 @@ class FindS2:
         self.end_date = end_date
         self.id_col = id_col
         self.base_url = base_url
+        self.check_img_cloud = False
         self.cloud_cover_max = cloud_cover_max
         self.s2cloudless_percent = s2cloudless_percent
         self.nodata_percent = nodata_percent
@@ -65,11 +66,11 @@ class FindS2:
         """
         Filters Sentinel-2 satellite tiles based on the given AOI.
 
-        This function intersects the input AOI with a layer of Sentinel-2 tiles.
+        Spatial joins the input AOI with a layer of Sentinel-2 tiles.
         The default layer is sourced from an ESA KML file.
 
         Returns:
-            None: Updates `tile_list` with the names of intersecting tiles.
+            None: Updates `tile_dict` with the intersecting tiles per aoi id.
         """
         try:
             supported_drivers["KML"] = "rw"
@@ -81,9 +82,8 @@ class FindS2:
                 ),
                 driver="kml",
             )
-            self.tile_list = gpd.sjoin(
-                tiles_layer, self.aoi.to_crs(epsg=4326), how="inner"
-            )["Name"].to_list()
+            tiles_join = gpd.sjoin(tiles_layer, self.aoi.to_crs(epsg=4326), how="inner")
+            self.tile_list = tiles_join["Name"].to_list()
         except Exception as e:
             print(f"Cannot read tiles reference layer: {e}")
 
@@ -128,40 +128,40 @@ class FindS2:
                 print(f"Request timed out for {check_url}. \nSkipping this date...")
         return urls
 
-    def _extract_xml_links(self, url):
+    def _extract_links(self, url):
         """
-        Extracts XML file links from a specified HTML webpage URL.
+        Extracts tif file links from a specified HTML webpage URL.
 
         Sends a GET request to the provided URL, parses the HTML content, and extracts all
-        links that end with '.xml?download=1'.
+        links that end with '.tif'.
         If `tile_list` is available, only extracts links containing specified tiles.
 
         Args:
-            url (str): The URL of the HTML webpage to extract XML links from.
+            url (str): The URL of the HTML webpage to extract tif links from.
 
         Returns:
-            set: A set of unique XML file links that meet the specified criteria.
+            set: A set of unique tif file links that meet the specified criteria.
         """
-        xml_links = []
+        img_links = []
         response = requests.get(url)
         if response.status_code == 200:
             soup = BeautifulSoup(response.content, "html.parser")
 
             for link in soup.find_all("a", href=True):
                 href = link["href"]
-                if href.endswith(".xml?download=1"):
+                if href.endswith("stdsref.tif?download=1"):
                     if isinstance(self.tile_list, list):
                         for t in self.tile_list:
                             if t in href:
-                                xml_links.append(href)
+                                img_links.append(href.replace("?download=1", ""))
                     else:
-                        xml_links.append(href)
+                        img_links.append(href)
 
-        return set(xml_links)
+        return set(img_links)
 
-    def all_xml_list(self):
+    def all_img_list(self):
         """
-        Gathers all XML file links from a range of URLs constructed based on a
+        Gathers all tif file links from a range of URLs constructed based on a
         base CEDA URL and a date range.
 
         Extracts XML links from each generated URL within the date range. Filters links based on provided
@@ -171,11 +171,11 @@ class FindS2:
             list: A list of all extracted XML file links across the specified date range.
         """
         date_urls = self._get_existing_folders()
-        xml_links = []
+        img_links = []
         for url in date_urls:
-            xml_links.extend(self._extract_xml_links(url))
+            img_links.extend(self._extract_links(url))
             time.sleep(random.uniform(0.01, 0.1))
-        return xml_links
+        return img_links
 
     @staticmethod
     def _extract_xml_cloud(xml_extract):
@@ -213,22 +213,6 @@ class FindS2:
         coord = coord.replace("\n", "")
         return float(coord)
 
-    def _extract_extent(self, xml_extract):
-        """
-        Extracts the extent of the geographic area from XML metadata.
-
-        Args:
-            xml_extract (BeautifulSoup): Parsed XML metadata using BeautifulSoup.
-
-        Returns:
-            shapely.geometry.Polygon: A polygon representing the bounding box (extent) of the area.
-        """
-        minx = self._clean_coord(xml_extract.find("gmd:westboundlongitude").text)
-        miny = self._clean_coord(xml_extract.find("gmd:southboundlatitude").text)
-        maxx = self._clean_coord(xml_extract.find("gmd:eastboundlongitude").text)
-        maxy = self._clean_coord(xml_extract.find("gmd:northboundlatitude").text)
-        return box(minx, miny, maxx, maxy)
-
     @staticmethod
     def _read_xml(url):
         """
@@ -250,7 +234,13 @@ class FindS2:
             print(f"Error reading XML from {url}: {e}")
         return None
 
-    def _no_data_filter(self, gdf_row):
+    def _img_bounds_filter(self, gdf_row, image_link):
+        with rio.open(image_link) as src:
+            image_bounds = src.bounds
+        image_geom = box(*image_bounds)
+        return gdf_row.geometry.intersects(image_geom)
+
+    def _no_data_filter(self, gdf_row, image_link):
         """
         Filters out images with too much nodata based on the specified percentage threshold.
 
@@ -260,9 +250,6 @@ class FindS2:
         Returns:
             bool: True if the nodata percentage exceeds the threshold, False otherwise.
         """
-        image_link = gdf_row["image_link"]
-        if not isinstance(image_link, str):
-            return False
         minx, miny, maxx, maxy = gdf_row.geometry.bounds
         try:
             with rio.open(image_link) as src:
@@ -271,12 +258,12 @@ class FindS2:
                 window_data = src.read(1, window=window)
                 window_size = window_data.shape[0] * window_data.shape[1]
                 nodata_total = np.sum(window_data == nodata)
-                return nodata_total / window_size * 100 >= self.nodata_percent
+                return nodata_total / window_size * 100 < self.nodata_percent
         except Exception as e:
             print(f"Cannot open image {e}")
             return False
 
-    def _s2_cloudless_filter(self, gdf_row):
+    def _s2_cloudless_filter(self, gdf_row, image_link):
         """
         Filters out images with too much cloud cover based on the S2 cloudless product.
 
@@ -286,9 +273,6 @@ class FindS2:
         Returns:
             bool: True if the cloud cover percentage exceeds the threshold, False otherwise.
         """
-        image_link = gdf_row["image_link"]
-        if not isinstance(image_link, str):
-            return False
         image_link = image_link.replace(
             "vmsk_sharp_rad_srefdem_stdsref.tif", "clouds.tif"
         )
@@ -299,14 +283,14 @@ class FindS2:
                 window_data = src.read(1, window=window)
                 window_size = window_data.shape[0] * window_data.shape[1]
                 cloud_issues = np.sum((window_data == 1) | (window_data == 2))
-                return cloud_issues / window_size * 100 >= self.s2cloudless_percent
+                return cloud_issues / window_size * 100 < self.s2cloudless_percent
 
         except Exception as e:
             print(f"Cannot open cloud mask image {e}")
             return False
 
     @staticmethod
-    def _extract_date_from_link(gdf_row):
+    def _extract_date_from_link(image_link):
         """
         Extracts a date string from the given file name.
 
@@ -316,12 +300,8 @@ class FindS2:
         Returns:
             str: The formatted date string (YYYY-MM-DD) if found, otherwise None.
         """
-        if not isinstance(gdf_row["image_link"], str):
-            return None
-        else:
-            s2_link = gdf_row["image_link"]
 
-        file_name = s2_link.split("/")[-1]
+        file_name = image_link.split("/")[-1]
         try:
             date_str = re.search(r"_(\d{8})_", file_name).group(1)
             formatted_date = f"{date_str[:4]}-{date_str[4:6]}-{date_str[6:]}"
@@ -330,7 +310,7 @@ class FindS2:
             print(f"Error extracting date from {file_name}: {e}")
             return None
 
-    def _filter_xmls_to_gdf(self, xml_links):
+    def _filter_overall_cloud(self, image_link):
         """
         Filters a list of Sentinel-2 XML links based on cloud cover and creates a
         GeoDataFrame of corresponding image links and extent geometry.
@@ -342,48 +322,13 @@ class FindS2:
             GeoDataFrame: A GeoDataFrame with 'image_link' for TIFF image URLs
             and 'geometry' of image extents.
         """
-        retained_links = []
-        retained_geom = []
-        for url in xml_links:
-            xml_extract = self._read_xml(url)
-            if xml_extract is None:
-                continue
-
-            if self._extract_xml_cloud(xml_extract) > self.cloud_cover_max:
-                continue
-
-            retained_geom.append(self._extract_extent(xml_extract))
-            retained_links.append(url)
-            time.sleep(random.uniform(0.01, 0.1))
-
-        image_links = [
-            x.replace("_meta.xml?download=1", ".tif") for x in retained_links
-        ]
-
-        return gpd.GeoDataFrame(
-            {"image_link": image_links, "geometry": retained_geom},
-            crs="epsg:4386",
-        )
-
-    def _image_links_to_aoi_gdf(self, xml_links):
-        """
-        Performs a spatial join between AOI polygons and corresponding Sentinel-2 images,
-        adding image download links as an attribute.
-
-        Args:
-            xml_links (list of str): List of links to Sentinel-2 XML files.
-
-        Returns:
-            GeoDataFrame: A GeoDataFrame of AOI polygons with corresponding image links.
-            If no suitable images are found, the image link column will be NULL.
-            If multiple matching images are found, AOI polygons are duplicated for each matching image URL.
-        """
-        filtered_image_gdf = self._filter_xmls_to_gdf(xml_links)
-        return gpd.sjoin(
-            self.aoi,
-            filtered_image_gdf.to_crs(epsg=27700),
-            how="left",
-        ).reset_index()
+        if self.check_img_cloud:
+            xml_url = image_link.replace(".tif", "_meta.xml?download=1")
+            xml_extract = self._read_xml(xml_url)
+            overall_check = self._extract_xml_cloud(xml_extract) <= self.cloud_cover_max
+            return overall_check
+        else:
+            return True
 
     def _filter_images(self, gdf):
         """
@@ -429,16 +374,49 @@ class FindS2:
         """
         print("filtering S2 tiles...")
         self._filter_sentinel2_tiles()
-        print("extracting xml image metadata...")
-        xml_links = self.all_xml_list()
-        print("joining suitable images to features...")
-        gdf = self._image_links_to_aoi_gdf(xml_links)
-        gdf = self._filter_images(gdf)
-        if gdf[gdf["image_link"].notna()].shape[0] == 0:
+        print("extracting image links...")
+        img_links = self.all_img_list()
+
+        img_links = [i for i in img_links if self._filter_overall_cloud(i)]
+
+        print("finding suitable images per feature...")
+        output_list = []
+        for l in img_links:
+            for i, row in self.aoi.iterrows():
+                print(f"searching {l.split("/")[-1][:12]} for feature {i}...")
+                validation = [
+                    bool(f(row, l))
+                    for f in [
+                        self._img_bounds_filter,
+                        self._no_data_filter,
+                        self._s2_cloudless_filter,
+                    ]
+                ]
+                if not all(validation):
+                    print()
+                    continue
+                row_dict = row.to_dict()
+                row_dict["image_link"] = l
+                row_dict["image_date"] = self._extract_date_from_link(l)
+                output_list.append(row_dict)
+
+        if not output_list:
+            print("no suitable images")
+            quit()
+
+        output_gdf = gpd.GeoDataFrame(
+            output_list, geometry="geometry", crs=self.aoi.crs
+        )
+
+        if output_gdf[output_gdf["image_link"].notna()].shape[0] == 0:
             print(WARNING, "No suitable cloud free images found")
         # keep all image links rows or one row per feature if no images found
-        gdf = gdf.groupby(self.id_col, group_keys=False).apply(self._filter_group)
-        gdf = gdf.sort_values(by=[self.id_col, "image_date"], ascending=True)
-        gdf = gdf.reset_index(drop=True)
+        output_gdf = output_gdf.groupby(self.id_col, group_keys=False).apply(
+            self._filter_group
+        )
+        output_gdf = output_gdf.sort_values(
+            by=[self.id_col, "image_date"], ascending=True
+        )
+        output_gdf = output_gdf.reset_index(drop=True)
         columns = list(self.aoi.columns) + ["image_link", "image_date"]
-        return gdf[columns]
+        return output_gdf[columns]
