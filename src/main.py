@@ -1,3 +1,4 @@
+import logging
 import argparse
 from pathlib import Path
 import geopandas as gpd
@@ -5,6 +6,13 @@ import datetime
 import matplotlib
 
 from ceda_s2 import FindS2, ImagePlotter, ImageDownloader
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="\n%(asctime)s.%(msecs)03d - %(message)s",
+    datefmt="%Y-%m-%d %H:%M:%S",
+    handlers=[logging.FileHandler("image_search.log"), logging.StreamHandler()],
+)
 
 # docker needs to use tkinter
 try:
@@ -98,13 +106,13 @@ def get_images(
         if "image_link" in search_features.columns:
             search_features = search_features.drop(columns=["image_link", "image_date"])
             search_features = search_features[~search_features.geometry.duplicated()]
-        print(
+        logging.info(
             f"Searching for Sentinel 2 images for {search_features.shape[0]} features..."
         )
         s2_finder = FindS2(search_features, start_date, end_date)
         image_features = s2_finder.find_image_links()
     else:
-        print(
+        logging.info(
             "Search features have existing 'image_link' column values, so using these..."
         )
         if not plot_images and not download_images:
@@ -118,7 +126,7 @@ def get_images(
         if new_search:
             save_path = _save_features_path(features_path, start_date, end_date)
             image_features.to_file(save_path)
-            print(f"saved search results to {save_path}")
+            logging.info(f"saved search results to {save_path}")
         if plot_images:
             ImagePlotter(image_features)
         if download_images:
@@ -128,7 +136,7 @@ def get_images(
             downloader.download_from_gdf()
 
     else:
-        print(f"{image_count} images found")
+        logging.info(f"{image_count} images found")
 
 
 def main():
