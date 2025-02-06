@@ -35,9 +35,13 @@ class FindS2:
         end_date,
         id_col="id",
         base_url="https://data.ceda.ac.uk/neodc/sentinel_ard/data/sentinel_2",
+        check_img_cloud=False,
         tile_cloud_max=20,
         s2cloudless_max=10,
-        nodata_percent=10,
+        nodata_max=10,
+        tile_gdf=None,
+        tile_list=None,
+        min_cloud_only=False,
     ):
         """
         Initializes the FindS2 class with the given parameters.
@@ -48,21 +52,26 @@ class FindS2:
             end_date (str): End date for the imagery search in "YYYY-MM-DD" format.
             id_col (str): Column name containing unique IDs in AOI GeoDataFrame.
             base_url (str): Base URL for Sentinel-2 data.
-            tile_cloud_max (float): Maximum cloud cover percentage from image tile metadata.
-            s2cloudless_max (float): Maximum allowable cloud cover percentage using S2 Cloudless filter within aoi.
-            nodata_percent (float): Maximum allowable nodata percentage within aoi.
+            check_img_cloud (bool): Whether to check image cloud cover from image tile metadata.
+            tile_cloud_max (float): Maximum allowable cloud cover percentage from image tile metadata.
+            s2cloudless_max (float): Maximum allowable cloud cover percentage using S2 Cloudless filter within each aoi feature.
+            nodata_max (float): Maximum allowable nodata percentage within aoi.
+            tile_gdf (GeoDataFrame): GeoDataFrame for Sentinel-2 tiles.
+            tile_list (list): List of Sentinel-2 tiles intersecting the AOI.
+            min_cloud_only (bool): If True, only the image with the minimum cloud cover percentage is kept for each feature.
         """
         self.aoi = aoi_gdf
         self.start_date = start_date
         self.end_date = end_date
         self.id_col = id_col
         self.base_url = base_url
-        self.check_img_cloud = False
+        self.check_img_cloud = check_img_cloud
         self.tile_cloud_max = tile_cloud_max
         self.s2cloudless_max = s2cloudless_max
-        self.nodata_percent = nodata_percent
-        self.tile_gdf = None
-        self.tile_list = None
+        self.nodata_max = nodata_max
+        self.tile_gdf = tile_gdf
+        self.tile_list = tile_list
+        self.min_cloud_only = min_cloud_only
 
         logging.basicConfig(
             level=logging.INFO,
@@ -320,7 +329,7 @@ class FindS2:
                 window_data = src.read(1, window=window)
                 window_size = window_data.shape[0] * window_data.shape[1]
                 nodata_total = np.sum(window_data == nodata)
-                return nodata_total / window_size * 100 < self.nodata_percent
+                return nodata_total / window_size * 100 < self.nodata_max
         except Exception as e:
             self.__logger.error(f"Cannot open image {e}")
             return False
@@ -345,14 +354,17 @@ class FindS2:
                 window_data = src.read(1, window=window)
                 window_size = window_data.shape[0] * window_data.shape[1]
                 cloud_issues = np.sum((window_data == 1) | (window_data == 2))
-                return cloud_issues / window_size * 100 < self.s2cloudless_max
+                cloud_percent = cloud_issues / window_size * 100
+                if cloud_percent < self.s2cloudless_max:
+                    return cloud_percent
+                else:
+                    return False
 
         except Exception as e:
             self.__logger.error(f"Cannot open cloud mask image {e}")
             return False
 
-    @staticmethod
-    def _extract_date_from_link(image_link):
+    def _extract_date_from_link(self, image_link):
         """
         Extracts a date string from the given file name.
 
@@ -385,7 +397,9 @@ class FindS2:
         if self.check_img_cloud:
             xml_url = image_link.replace(".tif", "_meta.xml?download=1")
             xml_extract = self._read_xml(xml_url)
-            overall_check = self._extract_xml_cloud(xml_extract) <= self.tile_cloud_max
+            xml_cloud_percent = self._extract_xml_cloud(xml_extract) * 100
+            self.__logger.info(f"{image_link.split("/")[-1]}:\nCloud cover percentage: {xml_cloud_percent}")
+            overall_check = xml_cloud_percent <= self.tile_cloud_max
             return overall_check
         else:
             return True
@@ -416,16 +430,19 @@ class FindS2:
             bool: True if the image passes all filters, False otherwise.
         """
         if not self._img_bounds_filter(row, image_link):
-            self.__logger.info("Bounds check failed")
+            self.__logger.info("Bounds check failed - out of bounds")
             return False
         if not self._no_data_filter(row, image_link):
-            self.__logger.info(f"No data check failed")
+            self.__logger.info(f"No data check failed - too much no data")
             return False
-        if not self._s2_cloudless_filter(row, image_link):
-            self.__logger.info(f"S2Cloudless check failed")
+        
+        cloud_percent_feature = self._s2_cloudless_filter(row, image_link)
+        if not cloud_percent_feature:    
+            self.__logger.info(f"S2Cloudless check failed - too cloudy")
             return False
-        self.__logger.info("Image passes all checks")
-        return True
+        
+        self.__logger.info(f"Image / feature passes all checks. s2cloudless percent {cloud_percent_feature}")
+        return int(cloud_percent_feature)
 
     def _find_images_per_feature(self, image_links):
         """
@@ -466,11 +483,13 @@ class FindS2:
                 self.__logger.info(
                     f"Checking {img_link.split('/')[-1]} for feature {current_id}..."
                 )
-                if self._validate_feature_image(aoi_feature, img_link):
+                valid_cloud_percent = self._validate_feature_image(aoi_feature, img_link)
+                if valid_cloud_percent:
                     row_dict = {
                         self.id_col: current_id,
                         "image_link": img_link,
                         "image_date": self._extract_date_from_link(img_link),
+                        "s2cloudles": valid_cloud_percent,
                     }
                     result_list.append(row_dict)
         return result_list
@@ -491,6 +510,9 @@ class FindS2:
         """
         results_df = pd.DataFrame(result_list)
 
+        if hasattr(self, 'min_cloud_only') and self.min_cloud_only:
+            results_df = results_df.loc[results_df.groupby(self.id_col, dropna=False)['s2cloudles'].idxmin()]
+
         # keep all image links rows or one row per feature if no images found
         output_gdf = self.aoi.merge(results_df, on=self.id_col, how="left")
 
@@ -498,7 +520,7 @@ class FindS2:
             by=[self.id_col, "image_date"], ascending=True
         )
         output_gdf = output_gdf.reset_index(drop=True)
-        columns = list(self.aoi.columns) + ["image_link", "image_date"]
+        columns = list(self.aoi.columns) + ["image_link", "image_date", "s2cloudles"]
         return output_gdf[columns]
 
     def find_image_links(self):
@@ -517,7 +539,7 @@ class FindS2:
         img_links = self.all_img_list()
         self.__logger.info(f"{len(img_links)} available images")
         if self.check_img_cloud:
-            self._overall_cloud_check_all(img_links)
+            img_links = self._overall_cloud_check_all(img_links)
             self.__logger.info(
                 f"filtered to {len(img_links)} images based on overall cloud cover"
             )

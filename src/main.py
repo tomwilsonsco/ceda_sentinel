@@ -73,7 +73,6 @@ def _save_features_path(features_path, start_date, end_date):
     output_name = f"{stem_name}_s2_search_{start_date}_{end_date}{extn}"
     return features_path.parent / output_name
 
-
 def get_images(
     features_path,
     new_search,
@@ -83,6 +82,9 @@ def get_images(
     download_images,
     download_path,
     band_indices,
+    tile_cloud_percent,
+    feature_cloud_percent,
+    min_cloud_only,
 ):
     """
     Search for Sentinel 2 images based on provided geographical features and date range.
@@ -95,8 +97,11 @@ def get_images(
         plot_images (bool): Whether to plot the images found.
         download_images (bool): Whether to download the images found.
         download_path (str): Path to save downloaded images.
-        band_indices (tuple): Tuple of band indices to write when downloading. NOTE: This is rasterio 1-indexed order,
-        not 0 indexed.
+        band_indices (tuple): Tuple of band indices to write when downloading. 
+        NOTE: This is rasterio 1-indexed order, not 0 indexed.
+        tile_cloud_percent (int): Maximum allowed cloud cover percentage for the entire tile.
+        feature_cloud_percent (int): Maximum allowed cloud cover percentage for the specific feature.
+        min_cloud_only (bool): If True, only the image with the minimum cloud cover percentage is kept for each feature.
 
     Returns:
         None
@@ -109,7 +114,15 @@ def get_images(
         logging.info(
             f"Searching for Sentinel 2 images for {search_features.shape[0]} features..."
         )
-        s2_finder = FindS2(search_features, start_date, end_date)
+        s2_finder = FindS2(
+            search_features,
+            start_date,
+            end_date,
+            check_img_cloud=tile_cloud_percent < 100,
+            tile_cloud_max=tile_cloud_percent,
+            s2cloudless_max=feature_cloud_percent,
+            min_cloud_only=min_cloud_only,
+        )
         image_features = s2_finder.find_image_links()
     else:
         logging.info(
@@ -209,6 +222,28 @@ def main():
                         Specify as space separated numbers e.g. '--download-band-indices 1 2 3'",
     )
 
+    parser.add_argument(
+        "--tile-cloud-percent",
+        type=float,
+        default=100.0,
+        help="Percentage of cloud cover to filter images by using image metadata. \
+            Default is 100.0 (percent, no filter).",
+    )
+
+    parser.add_argument(
+        "--feature-cloud-percent",
+        type=float,
+        default=10.0,
+        help="Percentage of cloud cover to filter feature image windows by using s2cloudless mask.\
+              Default is 10.0 (percent).",
+    )
+
+    parser.add_argument(
+        "--min-cloud-only",
+        action="store_true",
+        help="Only the least cloudy image for each feature is retained.",
+    )
+
     args = parser.parse_args()
 
     # Convert paths to Pathlib objects
@@ -241,6 +276,14 @@ def main():
         if not all(0 < x <= 10 for x in band_indices):
             raise ValueError("Band index values must be in the range 1-10.")
 
+    tile_cloud = float(args.tile_cloud_percent)
+    if tile_cloud > 100 or tile_cloud < 0:
+        raise ValueError("Tile cloud percentage must be between 0 and 100.")
+
+    feature_cloud = float(args.feature_cloud_percent)
+    if feature_cloud > 100 or feature_cloud < 0:
+        raise ValueError("Feature cloud percentage must be between 0 and 100.")
+
     get_images(
         features_path,
         new_search,
@@ -250,6 +293,9 @@ def main():
         args.download,
         args.download_path,
         band_indices,
+        tile_cloud,
+        feature_cloud,
+        args.min_cloud_only,
     )
 
 
