@@ -557,6 +557,6 @@ class FindS2:
         if not result_list:
             self.__logger.warning("Found no suitable images.")
             return None
-        
+
         output_gdf = self._results_to_gdf(result_list)
         return output_gdf

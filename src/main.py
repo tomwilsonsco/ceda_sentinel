@@ -73,21 +73,22 @@ def _save_features_path(features_path, start_date, end_date):
     extn = features_path.suffix
     stem_name = features_path.stem
 
-
     # Regular expression to match dates in the format YYYY-MM-DD
-    date_pattern = re.compile(r'\d{4}-\d{2}-\d{2}')
+    date_pattern = re.compile(r"\d{4}-\d{2}-\d{2}")
 
     # Check if stem_name already ends with two dates in the format YYYY-MM-DD_YYYY-MM-DD
-    if (date_pattern.match(stem_name[-21:-11]) and 
-        date_pattern.match(stem_name[-10:]) and 
-        stem_name[-11] == '_' and 
-        stem_name[-22] == '_'):
-        
+    if (
+        date_pattern.match(stem_name[-21:-11])
+        and date_pattern.match(stem_name[-10:])
+        and stem_name[-11] == "_"
+        and stem_name[-22] == "_"
+    ):
+
         existing_start_date = stem_name[-21:-11]
         existing_end_date = stem_name[-10:]
 
-        stem_name = stem_name[:-21]     
-        
+        stem_name = stem_name[:-21]
+
         if start_date > existing_start_date:
             start_date = existing_start_date
         if end_date < existing_end_date:
@@ -97,7 +98,12 @@ def _save_features_path(features_path, start_date, end_date):
     return features_path.parent / output_name
 
     # Check if stem_name already ends with two dates in the format YYYY-MM-DD_YYYY-MM-DD
-    if stem_name[-21:-11].isdigit() and stem_name[-10:].isdigit() and stem_name[-11] == '_' and stem_name[-22] == '_':
+    if (
+        stem_name[-21:-11].isdigit()
+        and stem_name[-10:].isdigit()
+        and stem_name[-11] == "_"
+        and stem_name[-22] == "_"
+    ):
         existing_start_date = stem_name[-21:-11]
         existing_end_date = stem_name[-10:]
         if start_date > existing_start_date:
@@ -151,7 +157,9 @@ def get_images(
     )
     if full_search:
         if "image_link" in search_features.columns:
-            search_features = search_features.drop(columns=["image_link", "image_date", "s2cloudles"])
+            search_features = search_features.drop(
+                columns=["image_link", "image_date", "s2cloudles"]
+            )
             search_features = search_features[~search_features.geometry.duplicated()]
     if new_search:
         existing_search = None
@@ -185,7 +193,7 @@ def get_images(
                 "Need to specify 'plot' or 'download' arguments to use existing image links."
             )
         image_features = search_features
-    
+
     if not image_features.empty:
         image_count = image_features[image_features["image_link"].notna()].shape[0]
     else:
