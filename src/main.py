@@ -1,10 +1,20 @@
+import logging
 import argparse
 from pathlib import Path
 import geopandas as gpd
+import pandas as pd
 import datetime
 import matplotlib
+import re
 
 from ceda_s2 import FindS2, ImagePlotter, ImageDownloader
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="\n%(asctime)s.%(msecs)03d - %(message)s",
+    datefmt="%Y-%m-%d %H:%M:%S",
+    handlers=[logging.FileHandler("image_search.log"), logging.StreamHandler()],
+)
 
 # docker needs to use tkinter
 try:
@@ -62,50 +72,121 @@ def _save_features_path(features_path, start_date, end_date):
     """
     extn = features_path.suffix
     stem_name = features_path.stem
-    output_name = f"{stem_name}_s2_search_{start_date}_{end_date}{extn}"
+
+    # Regular expression to match dates in the format YYYY-MM-DD
+    date_pattern = re.compile(r"\d{4}-\d{2}-\d{2}")
+
+    # Check if stem_name already ends with two dates in the format YYYY-MM-DD_YYYY-MM-DD
+    if (
+        date_pattern.match(stem_name[-21:-11])
+        and date_pattern.match(stem_name[-10:])
+        and stem_name[-11] == "_"
+        and stem_name[-22] == "_"
+    ):
+
+        existing_start_date = stem_name[-21:-11]
+        existing_end_date = stem_name[-10:]
+
+        stem_name = stem_name[:-21]
+
+        if start_date > existing_start_date:
+            start_date = existing_start_date
+        if end_date < existing_end_date:
+            end_date = existing_end_date
+
+        output_name = f"{stem_name}_s2_search_{start_date}_{end_date}{extn}"
+    return features_path.parent / output_name
+
+    # Check if stem_name already ends with two dates in the format YYYY-MM-DD_YYYY-MM-DD
+    if (
+        stem_name[-21:-11].isdigit()
+        and stem_name[-10:].isdigit()
+        and stem_name[-11] == "_"
+        and stem_name[-22] == "_"
+    ):
+        existing_start_date = stem_name[-21:-11]
+        existing_end_date = stem_name[-10:]
+        if start_date > existing_start_date:
+            start_date = existing_start_date
+        if end_date < existing_end_date:
+            end_date = existing_end_date
+
+    output_name = f"{stem_name[:-21]}_s2_search_{start_date}_{end_date}{extn}"
     return features_path.parent / output_name
 
 
 def get_images(
     features_path,
-    new_search,
+    full_search,
     start_date,
     end_date,
     plot_images,
     download_images,
     download_path,
     band_indices,
+    tile_cloud_percent,
+    feature_cloud_percent,
+    min_cloud_only,
 ):
     """
     Search for Sentinel 2 images based on provided geographical features and date range.
 
     Args:
         features_path (Path): Path to the file containing geographical features (GeoPackage or Shapefile).
-        new_search (bool): Whether a new search or using image links in existing image_link column.
+        full_search (bool): Whether a full new search or retain image links in existing image_link column
+        and just search for null rows.
         start_date (str): Start date for the image search in YYYY-MM-DD format.
         end_date (str): End date for the image search in YYYY-MM-DD format.
         plot_images (bool): Whether to plot the images found.
         download_images (bool): Whether to download the images found.
         download_path (str): Path to save downloaded images.
-        band_indices (tuple): Tuple of band indices to write when downloading. NOTE: This is rasterio 1-indexed order,
-        not 0 indexed.
+        band_indices (tuple): Tuple of band indices to write when downloading.
+        NOTE: This is rasterio 1-indexed order, not 0 indexed.
+        tile_cloud_percent (int): Maximum allowed cloud cover percentage for the entire tile.
+        feature_cloud_percent (int): Maximum allowed cloud cover percentage for the specific feature.
+        min_cloud_only (bool): If True, only the image with the minimum cloud cover percentage is kept for each feature.
 
     Returns:
         None
     """
     search_features = gpd.read_file(features_path)
-    if new_search:
+    new_search = (
+        full_search
+        or "image_link" not in search_features.columns
+        or search_features["image_link"].isna().any()
+    )
+    if full_search:
         if "image_link" in search_features.columns:
-            search_features = search_features.drop(columns=["image_link", "image_date"])
+            search_features = search_features.drop(
+                columns=["image_link", "image_date", "s2cloudles"]
+            )
             search_features = search_features[~search_features.geometry.duplicated()]
-        print(
+    if new_search:
+        existing_search = None
+        if (
+            "image_link" in search_features.columns
+            and search_features["image_link"].notna().sum() > 0
+        ):
+            existing_search = search_features[search_features["image_link"].notna()]
+            search_features = search_features[
+                search_features["image_link"].isna()
+            ].drop(columns=["image_link", "image_date", "s2cloudles"])
+        logging.info(
             f"Searching for Sentinel 2 images for {search_features.shape[0]} features..."
         )
-        s2_finder = FindS2(search_features, start_date, end_date)
+        s2_finder = FindS2(
+            search_features,
+            start_date,
+            end_date,
+            check_img_cloud=tile_cloud_percent < 100,
+            tile_cloud_max=tile_cloud_percent,
+            s2cloudless_max=feature_cloud_percent,
+            min_cloud_only=min_cloud_only,
+        )
         image_features = s2_finder.find_image_links()
     else:
-        print(
-            "Search features have existing 'image_link' column values, so using these..."
+        logging.info(
+            "Search features have fully populated existing 'image_link' column values, so using these..."
         )
         if not plot_images and not download_images:
             raise ValueError(
@@ -113,12 +194,21 @@ def get_images(
             )
         image_features = search_features
 
-    image_count = image_features[image_features["image_link"].notna()].shape[0]
+    if not image_features.empty:
+        image_count = image_features[image_features["image_link"].notna()].shape[0]
+    else:
+        image_count = 0
+
     if image_count > 0:
         if new_search:
+            if existing_search is not None:
+                image_features = gpd.GeoDataFrame(
+                    pd.concat([image_features, existing_search])
+                )
+            image_features = image_features.sort_values(by=["id", "image_date"])
             save_path = _save_features_path(features_path, start_date, end_date)
             image_features.to_file(save_path)
-            print(f"saved search results to {save_path}")
+            logging.info(f"saved search results to {save_path}")
         if plot_images:
             ImagePlotter(image_features)
         if download_images:
@@ -128,7 +218,7 @@ def get_images(
             downloader.download_from_gdf()
 
     else:
-        print(f"{image_count} images found")
+        logging.info("No results layer written as no images found.")
 
 
 def main():
@@ -201,6 +291,28 @@ def main():
                         Specify as space separated numbers e.g. '--download-band-indices 1 2 3'",
     )
 
+    parser.add_argument(
+        "--tile-cloud-percent",
+        type=float,
+        default=100.0,
+        help="Percentage of cloud cover to filter images by using image metadata. \
+            Default is 100.0 (percent, no filter).",
+    )
+
+    parser.add_argument(
+        "--feature-cloud-percent",
+        type=float,
+        default=10.0,
+        help="Percentage of cloud cover to filter feature image windows by using s2cloudless mask.\
+              Default is 10.0 (percent).",
+    )
+
+    parser.add_argument(
+        "--min-cloud-only",
+        action="store_true",
+        help="Only the least cloudy image for each feature is retained.",
+    )
+
     args = parser.parse_args()
 
     # Convert paths to Pathlib objects
@@ -211,12 +323,12 @@ def main():
         raise FileNotFoundError("Search features path does not exist.")
 
     search_features = gpd.read_file(features_path)
-    new_search = (
+    full_search = (
         "image_link" not in search_features.columns
         or search_features["image_link"].isna().all()
         or args.overwrite_search
     )
-    if new_search:
+    if full_search:
         if args.start_date is None or args.end_date is None:
             raise ValueError(
                 "For a new search must specify start-date and end-date arguments."
@@ -233,15 +345,26 @@ def main():
         if not all(0 < x <= 10 for x in band_indices):
             raise ValueError("Band index values must be in the range 1-10.")
 
+    tile_cloud = float(args.tile_cloud_percent)
+    if tile_cloud > 100 or tile_cloud < 0:
+        raise ValueError("Tile cloud percentage must be between 0 and 100.")
+
+    feature_cloud = float(args.feature_cloud_percent)
+    if feature_cloud > 100 or feature_cloud < 0:
+        raise ValueError("Feature cloud percentage must be between 0 and 100.")
+
     get_images(
         features_path,
-        new_search,
+        full_search,
         args.start_date,
         args.end_date,
         args.plot,
         args.download,
         args.download_path,
         band_indices,
+        tile_cloud,
+        feature_cloud,
+        args.min_cloud_only,
     )
 
 

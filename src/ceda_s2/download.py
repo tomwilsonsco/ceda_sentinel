@@ -1,3 +1,4 @@
+import logging
 import rasterio as rio
 from rasterio.windows import from_bounds
 from pathlib import Path
@@ -49,13 +50,24 @@ class ImageDownloader:
         self.link_col = link_col
         self.band_indices = list(band_indices)
         self.feature_col = feature_col
-        self.band_descriptions = None
+        self.band_descriptions = band_descriptions
 
         if self.feature_col not in self.gdf.columns:
             raise ValueError("Feature column {id} not found in features.")
 
         if self.gdf.empty:
             raise ValueError("The GeoDataFrame is empty.")
+
+        logging.basicConfig(
+            level=logging.INFO,
+            format="\n%(asctime)s.%(msecs)03d - %(message)s",
+            datefmt="%Y-%m-%d %H:%M:%S",
+            handlers=[
+                logging.FileHandler("image_search.log", mode="w"),
+                logging.StreamHandler(),
+            ],
+        )
+        self.__logger = logging.getLogger(__name__)
 
     @staticmethod
     def _create_file_name(s2_link, feature_id):
@@ -90,7 +102,7 @@ class ImageDownloader:
             if i == 0:
                 band_names = list(src.descriptions)
                 self.band_descriptions = [band_names[j - 1] for j in self.band_indices]
-                print(
+                self.__logger.info(
                     f"Downloading bands {self.band_descriptions}.\nAvailable bands {band_names}"
                 )
             window = from_bounds(minx, miny, maxx, maxy, src.transform)
@@ -119,11 +131,16 @@ class ImageDownloader:
         with rio.open(output_file, "w", **prof) as f:
             f.descriptions = tuple(self.band_descriptions)
             f.write(window_data)
-            print(f"written {output_file}")
+            self.__logger.info(f"written {output_file}")
 
     def download_from_gdf(self):
         """
         Downloads image data for all features in the GeoDataFrame and saves them to the output directory.
         """
+        self.gdf = self.gdf[
+            self.gdf[self.link_col].apply(
+                lambda x: isinstance(x, str) and x.startswith("http")
+            )
+        ]
         for i, row in self.gdf.iterrows():
             self._write_window(*self._read_from_row(i, row))
