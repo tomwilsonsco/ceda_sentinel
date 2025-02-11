@@ -398,7 +398,9 @@ class FindS2:
             xml_url = image_link.replace(".tif", "_meta.xml?download=1")
             xml_extract = self._read_xml(xml_url)
             xml_cloud_percent = self._extract_xml_cloud(xml_extract) * 100
-            self.__logger.info(f"{image_link.split("/")[-1]}:\nCloud cover percentage: {xml_cloud_percent}")
+            self.__logger.info(
+                f"{image_link.split("/")[-1]}:\nCloud cover percentage: {xml_cloud_percent}"
+            )
             overall_check = xml_cloud_percent <= self.tile_cloud_max
             return overall_check
         else:
@@ -435,13 +437,15 @@ class FindS2:
         if not self._no_data_filter(row, image_link):
             self.__logger.info(f"No data check failed - too much no data")
             return False
-        
+
         cloud_percent_feature = self._s2_cloudless_filter(row, image_link)
-        if not cloud_percent_feature:    
+        if not cloud_percent_feature:
             self.__logger.info(f"S2Cloudless check failed - too cloudy")
             return False
-        
-        self.__logger.info(f"Image / feature passes all checks. s2cloudless percent {cloud_percent_feature}")
+
+        self.__logger.info(
+            f"Image / feature passes all checks. s2cloudless percent {cloud_percent_feature}"
+        )
         return int(cloud_percent_feature)
 
     def _find_images_per_feature(self, image_links):
@@ -483,7 +487,9 @@ class FindS2:
                 self.__logger.info(
                     f"Checking {img_link.split('/')[-1]} for feature {current_id}..."
                 )
-                valid_cloud_percent = self._validate_feature_image(aoi_feature, img_link)
+                valid_cloud_percent = self._validate_feature_image(
+                    aoi_feature, img_link
+                )
                 if valid_cloud_percent:
                     row_dict = {
                         self.id_col: current_id,
@@ -510,8 +516,10 @@ class FindS2:
         """
         results_df = pd.DataFrame(result_list)
 
-        if hasattr(self, 'min_cloud_only') and self.min_cloud_only:
-            results_df = results_df.loc[results_df.groupby(self.id_col, dropna=False)['s2cloudles'].idxmin()]
+        if hasattr(self, "min_cloud_only") and self.min_cloud_only:
+            results_df = results_df.loc[
+                results_df.groupby(self.id_col, dropna=False)["s2cloudles"].idxmin()
+            ]
 
         # keep all image links rows or one row per feature if no images found
         output_gdf = self.aoi.merge(results_df, on=self.id_col, how="left")
@@ -547,7 +555,8 @@ class FindS2:
         result_list = self._find_images_per_feature(img_links)
 
         if not result_list:
-            raise ValueError("Found no suitable images.")
-
+            self.__logger.warning("Found no suitable images.")
+            return None
+        
         output_gdf = self._results_to_gdf(result_list)
         return output_gdf
