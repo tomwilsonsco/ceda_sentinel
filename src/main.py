@@ -95,7 +95,7 @@ def _save_features_path(features_path, start_date, end_date):
             end_date = existing_end_date
 
     output_name = f"{stem_name}_s2_search_{start_date}_{end_date}{extn}"
-    
+
     return features_path.parent / output_name
 
     # Check if stem_name already ends with two dates in the format YYYY-MM-DD_YYYY-MM-DD
