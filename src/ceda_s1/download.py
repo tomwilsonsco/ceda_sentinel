@@ -73,6 +73,7 @@ class S1Downloader:
                     transform=out_transform,
                     dtype=img_arr.dtype,
                 )
+                self.__logger.info(f"Read array from {image_link}")
                 return img_arr, out_metadata
         except Exception as e:
             self.__logger.error(f"Error reading {image_link}: {e}")
@@ -155,12 +156,14 @@ class S1Downloader:
                 self.__logger.info(f"Downloaded {output_path}")
 
         if self.asc_list:
+            self.__logger.info(f"Calculating median for {len(self.asc_list)} ascending images.")
             asc_median = self._median_of_arrays(self.asc_list)
             asc_output_path = Path(self.output_dir) / f"{self.median_name}_asc.tif"
             self._write_window(asc_median, out_metadata, asc_output_path)
             self.__logger.info(f"Downloaded {asc_output_path}")
 
         if self.desc_list:
+            self.__logger.info(f"Calculating median for {len(self.desc_list)} descending images.")
             desc_median = self._median_of_arrays(self.desc_list)
             desc_output_path = Path(self.output_dir) / f"{self.median_name}_desc.tif"
             self._write_window(desc_median, out_metadata, desc_output_path)
