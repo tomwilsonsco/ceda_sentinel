@@ -6,14 +6,19 @@ from datetime import datetime, timedelta
 import time
 import random
 import geopandas as gpd
-import rasterio
-from rasterio.features import geometry_mask
+import numpy as np
+import rasterio as rio
+from rasterio.windows import from_bounds, shape
+from scipy.ndimage import label
 
 logging.basicConfig(
     level=logging.INFO,
     format="\n%(asctime)s.%(msecs)03d - %(message)s",
     datefmt="%Y-%m-%d %H:%M:%S",
-    handlers=[logging.FileHandler("image_search.log"), logging.StreamHandler()],
+    handlers=[
+                logging.FileHandler("s1_image_search.log", mode="w"),
+                logging.StreamHandler(),
+            ],
 )
 
 
@@ -30,7 +35,8 @@ class FindS1:
         end_date,
         aoi_filepath,
         orbit_numbers=[30, 52, 103, 125, 132],
-        filter_orbits=True,
+        filter_orbits=False,
+        max_no_data_patch=10,
     ):
         """
         Initializes the FindS1 class.
@@ -41,14 +47,17 @@ class FindS1:
             aoi_filepath (str): The filepath to shapefile, geojson or geopackage for area of interest.
             orbit_numbers (list): A list of relative orbit numbers to filter results by.
             filter_orbits (bool): If True only one ascending and one descending orbit will be returned.
+            max_no_data_patch (int): If a continuous region of no data pixels is larger than this value, the image is discarded.
         """
         self.start_date = start_date
         self.end_date = end_date
         self.orbit_numbers = orbit_numbers
+        self.filter_orbits = filter_orbits
         self.aoi_filepath = aoi_filepath
+        self.max_no_data_patch = max_no_data_patch
         self.base_url = "https://data.ceda.ac.uk/neodc/sentinel_ard/data/sentinel_1"
-        self.__logger = logging.getLogger(__name__)
         self.aoi = self._read_aoi_file()
+        self.__logger = logging.getLogger(__name__)
 
     def _read_aoi_file(self):
         """
@@ -163,15 +172,18 @@ class FindS1:
                     desc_orbits[orbit_number] = 0
                 desc_orbits[orbit_number] += 1
 
-        sorted_asc_orbits = sorted(asc_orbits, key=asc_orbits.get, reverse=True)
-        sorted_desc_orbits = sorted(desc_orbits, key=desc_orbits.get, reverse=True)
+        sorted_asc_orbits = dict(
+            sorted(asc_orbits.items(), key=lambda item: item[1], reverse=True)
+        )
+        sorted_desc_orbits = dict(
+            sorted(desc_orbits.items(), key=lambda item: item[1], reverse=True)
+        )
 
         return sorted_asc_orbits, sorted_desc_orbits
 
-    def _spatial_check_orbits(self, img_list, sorted_orbits):
+    def _spatial_check_images(self, img_list):
         """
-        Checks if the specified orbit numbers are present in the image list and if the image geometry
-        entirely contains the AOI geometry.
+        Checks if a window of the AOI geometry is entirely contained within the image.
 
         Args:
             img_list (list): A list of image links to check.
@@ -179,25 +191,75 @@ class FindS1:
         Returns:
             str: The first image link that matches the criteria.
         """
+        retained_images = []
         aoi_gdf = self._read_aoi_file()
-        for use_orbit in sorted_orbits:
-            for img_link in img_list:
-                parts = img_link.split("/")[-1].split("_")
-                orbit_number = int(parts[2])
-                if orbit_number == use_orbit:
-                    with rasterio.open(img_link) as src:
-                        img_bounds = src.bounds
-                        aoi_bounds = aoi_gdf.total_bounds
-                        if (
-                            img_bounds[0] <= aoi_bounds[0]
-                            and img_bounds[1] <= aoi_bounds[1]
-                            and img_bounds[2] >= aoi_bounds[2]
-                            and img_bounds[3] >= aoi_bounds[3]
-                        ):
-                            return use_orbit
-        return None
+        bounds = aoi_gdf.bounds.values[0]
+        for img_link in img_list:
+            try:
+                with rio.open(img_link) as src:
+                    window = from_bounds(*bounds, transform=src.transform)
+                    arr = src.read(window=window)
+                    if arr.shape[1] > 0 and arr.shape[2] > 0:
+                        retained_images.append(img_link)
+                        self.__logger.info(f"Image {img_link} retained.")
+                    else:
+                        self.__logger.info(f"Image {img_link} discarded.")
+            except Exception as e:
+                self.__logger.error(f"Error reading image {img_link}: {e}")
+        return retained_images
 
-    def _get_orbits(self, img_list):
+    def _find_largest_region(self, binary_image):
+        """
+        Find the largest continuous region from a binary image.
+
+        Parameters:
+        image (numpy.ndarray): The input image.
+
+        Returns:
+        int: The size of the largest continuous region.
+        """
+        if np.max(binary_image) == 0:
+            return 0
+        # Label connected components
+        labeled_array, _ = label(binary_image)
+
+        # Find the size of each connected component
+        component_sizes = np.bincount(labeled_array.ravel())[1:]
+
+        # Find the largest connected component
+        return int(component_sizes.max())
+
+    def _filter_nodata(self, img_list):
+        """
+        Filters images based on the percentage of nodata pixels.
+
+        Args:
+            img_list (list): A list of image links to check.
+
+        Returns:
+            list: A list of image links that meet the specified criteria.
+        """
+        retained_images = []
+        aoi_gdf = self._read_aoi_file()
+        bounds = aoi_gdf.bounds.values[0]
+        for img_link in img_list:
+            try:
+                with rio.open(img_link) as src:
+                    window = from_bounds(*bounds, transform=src.transform)
+                    arr = src.read(window=window)
+                    no_data_value = src.nodata
+                    binary_image = (arr[1] == no_data_value).astype(np.uint8)
+                    largest_region = self._find_largest_region(binary_image)
+                    if largest_region <= self.max_no_data_patch:
+                        retained_images.append(img_link)
+                        self.__logger.info(f"Image {img_link} retained.")
+                    else:
+                        self.__logger.info(f"Image {img_link} discarded.")
+            except Exception as e:
+                self.__logger.error(f"Error reading image {img_link}: {e}")
+        return retained_images
+
+    def _filter_image_extent(self, img_list):
         """
         Checks if the specified orbit numbers are present in the image list and if the image geometry
         entirely contains the AOI geometry.
@@ -208,20 +270,37 @@ class FindS1:
         Returns:
             str: The first image link that matches the criteria.
         """
+        self.__logger.info(f"Filtering {len(img_list)} images based on AOI window.")
+        img_list = self._spatial_check_images(img_list)
+        self.__logger.info(f"After AOI extent filter {len(img_list)} images.")
+
+        self.__logger.info(
+            f"Filtering {len(img_list)} images based on nodata pixel patches."
+        )
+        img_list = self._filter_nodata(img_list)
+        self.__logger.info(f"After no data filter {len(img_list)} images.")
 
         sorted_asc_orbits, sorted_desc_orbits = self._count_orbits(img_list)
 
-        use_asc_orbit = self._spatial_check_orbits(img_list, sorted_asc_orbits)
-        use_desc_orbit = self._spatial_check_orbits(img_list, sorted_desc_orbits)
+        self.__logger.info(f"Order of asc orbits {sorted_asc_orbits}")
+        self.__logger.info(f"Order_of desc orbits {sorted_desc_orbits}")
 
-        self.__logger.info(f"Using ascending orbit: {use_asc_orbit}")
-        self.__logger.info(f"Using descending orbit: {use_desc_orbit}")
+        if self.filter_orbits:
 
-        return [
-            i
-            for i in img_list
-            if int(i.split("/")[-1].split("_")[2]) in [use_asc_orbit, use_desc_orbit]
-        ]
+            use_asc_orbit = list(sorted_asc_orbits.keys())[0]
+            use_desc_orbit = list(sorted_desc_orbits.keys())[0]
+            self.__logger.info(
+                f"Filtering to asc {use_asc_orbit} and desc {use_desc_orbit} orbits."
+            )
+
+            img_list = [
+                x
+                for x in img_list
+                if int(x.split("/")[-1].split("_")[2])
+                in [use_asc_orbit, use_desc_orbit]
+            ]
+
+        return img_list
 
     def get_img_list(self):
         """
@@ -238,8 +317,8 @@ class FindS1:
         for url in date_urls:
             img_links.extend(self._extract_links(url))
             time.sleep(random.uniform(0.01, 0.1))
-        if self.orbit_numbers:
-            img_links = self._get_orbits(img_links)
-            self.__logger.info(f"{len(img_links)} after orbit filter.")
+
+        img_links = self._filter_image_extent(img_links)
+        self.__logger.info(f"Returning {len(img_links)} suitable image links.")
 
         return img_links
