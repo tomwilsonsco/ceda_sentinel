@@ -25,7 +25,7 @@ The easiest way to extract images is by running `src/s2_search.py`.
 For example with a geopackage of search features stored in the inputs directory of this repository:
 
 ```bash
-python src/main.py --search-features inputs/test_search.gpkg \
+python src/s2_search.py --search-features inputs/test_search.gpkg \
 --start-date 2024-04-01 --end-date 2024-05-31 --plot --download
 ```
 The above will:
