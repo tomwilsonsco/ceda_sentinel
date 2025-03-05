@@ -13,3 +13,4 @@ lxml
 ipykernel
 matplotlib
 fiona
+scipy
