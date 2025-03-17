@@ -10,9 +10,9 @@ logging.basicConfig(
     format="\n%(asctime)s.%(msecs)03d - %(message)s",
     datefmt="%Y-%m-%d %H:%M:%S",
     handlers=[
-                logging.FileHandler("s1_image_search.log", mode="w"),
-                logging.StreamHandler(),
-            ],
+        logging.FileHandler("s1_image_search.log", mode="w"),
+        logging.StreamHandler(),
+    ],
 )
 
 
@@ -53,27 +53,27 @@ def main():
         "--aoi-filepath",
         type=str,
         help="The file path to the area of interest (AOI) shapefile. \
-            If specified, images will be checked within this AOI \
-                unless --no_orbit_filter is also specified. \
-            NOTE: Currently designed to process one AOI polygon per file",
+            If specified, images will be checked within this AOI.",
+    )
+    parser.add_argument(
+        "--aoi-id",
+        type=str,
+        default="OBJECTID",
+        help="The name of the field containing unique ids for aoi features. \
+            Defaults to OBJECTID.",
     )
     parser.add_argument(
         "--image-links-pkl",
         type=str,
-        help="The file path to pickle file containing list of image links.\
+        help="The file path to pickle file containing dict of image links per aoi feature.\
             If not specified will search for images.",
     )
     parser.add_argument(
         "--output-dir",
         type=str,
         default="outputs",
-        help="The directory to save the output pickle file. Defaults to 'outputs'.",
-    )
-    parser.add_argument(
-        "--no-orbit-filter",
-        action="store_false",
-        help="If specified, orbits will not be filtered to one orbit number \
-            for descending and ascending only.",
+        help="The base directory to save the outputs. Defaults to 'outputs/<aoi_file_name>'. \
+            A subdirectory with results is created for each polygon feauture in the AOI file.",
     )
 
     parser.add_argument(
@@ -82,15 +82,23 @@ def main():
         help="If specified, all S1 images in date range for aoi window are downloaded to tif.",
     )
     parser.add_argument(
-        "--download-median",
+        "--download-tifs",
         action="store_true",
-        help="If specified, median composite for ascending, descending orbits downloaded to tif.",
+        help="If specified, images downloaded as separate tif files, \
+            otherwise one npz file created per feature with dict of image name \
+            image array",
     )
-
     parser.add_argument(
         "--no-ratio",
         action="store_false",
         help="If specified, no VV - VH ratio band is calculated before downloading images.",
+    )
+    parser.add_argument(
+        "--feature-ids",
+        type=int,
+        nargs="+",
+        help="Optional list of ids to download images for if wish to test subset \
+            without long download times. Should be space separated.",
     )
 
     args = parser.parse_args()
@@ -103,63 +111,58 @@ def main():
             )
 
         finder = FindS1(
-            args.start_date,
-            args.end_date,
-            args.aoi_filepath,
-            args.orbit_numbers,
-            args.no_orbit_filter,
+            start_date=args.start_date,
+            end_date=args.end_date,
+            orbit_numbers=args.orbit_numbers,
+            aoi_filepath=args.aoi_filepath,
+            aoi_id=args.aoi_id,
         )
-        img_list = finder.get_img_list()
-        logging.info(f"Found {len(img_list)} images in the date range.")
-        logging.info(f"First 5 records: {img_list[:5]}")
+        img_dict = finder.get_img_feature_dict()
 
         # Create output directory if it doesn't exist
         output_dir = Path(args.output_dir)
         output_dir.mkdir(parents=True, exist_ok=True)
 
         # Generate output file name
-        orbit_numbers_str = "_".join(map(str, args.orbit_numbers))
+        aoi_file_name = Path(args.aoi_filepath).stem
         output_file_name = (
-            f"s1_links_{orbit_numbers_str}_{args.start_date}_{args.end_date}.pkl"
+            f"s1_links_{aoi_file_name}_{args.start_date}_{args.end_date}.pkl"
         )
         output_file_path = output_dir / output_file_name
 
         # Save img_list to pickle file
         with open(output_file_path, "wb") as f:
-            pickle.dump(img_list, f)
+            pickle.dump(img_dict, f)
 
-        logging.info(f"Image links saved to {output_file_path}")
+        logging.info(f"Image link dict saved to {output_file_path}")
 
     if args.image_links_pkl:
-        if not (args.download_all or args.download_median):
-            parser.error("--download-all or --download-median must be specified.")
+        if not args.download_all:
+            parser.error(
+                "--download-all must be specified if --image-links-pkl is provided."
+            )
         try:
             with open(args.image_links_pkl, "rb") as f:
-                img_list = pickle.load(f)
+                img_dict = pickle.load(f)
         except FileNotFoundError:
             logging.error(f"File {args.image_links_pkl} not found.")
             return
 
+    if args.download_all and img_dict:
 
-    if (args.download_all or args.download_median) and img_list:
-        
-        download_median = args.download_median if args.download_median else False
+        download_all = args.download_all if args.download_all else False
 
-        dowload_all = args.download_all if args.download_all else False
+        download_tifs = args.download_tifs if args.download_tifs else False
 
-        if args.start_date and args.end_date:
-            median_name = f"s1_median_{args.start_date}_{args.end_date}_{Path(args.aoi_filepath).stem}"
-        else:
-            median_name = f"s1_median_{Path(args.aoi_filepath).stem}"
-        
         downloader = S1Downloader(
-            img_list,
-            args.aoi_filepath,
-            args.output_dir,
-            args.no_ratio,
-            download_all=dowload_all,
-            median_composite=download_median,
-            median_name=median_name,
+            image_links=img_dict,
+            aoi_filepath=args.aoi_filepath,
+            output_dir=args.output_dir,
+            tif_output=download_tifs,
+            aoi_id=args.aoi_id,
+            feature_ids=args.feature_ids,
+            ratio_band=args.no_ratio,
+            download_all=download_all,
         )
         downloader.download_images()
 

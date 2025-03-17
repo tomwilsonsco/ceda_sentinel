@@ -1,18 +1,21 @@
 import rasterio as rio
+from rasterio.mask import mask
 from rasterio.windows import from_bounds
+from shapely.geometry import box
 import geopandas as gpd
 import numpy as np
 from pathlib import Path
 import logging
+import concurrent.futures
 
 logging.basicConfig(
     level=logging.INFO,
     format="\n%(asctime)s.%(msecs)03d - %(message)s",
     datefmt="%Y-%m-%d %H:%M:%S",
     handlers=[
-                logging.FileHandler("s1_image_search.log", mode="w"),
-                logging.StreamHandler(),
-            ],
+        logging.FileHandler("s1_image_search.log", mode="w"),
+        logging.StreamHandler(),
+    ],
 )
 
 
@@ -21,14 +24,13 @@ class S1Downloader:
     Download cloud optimised geotiffs image extracts using geodataframe geometries.
 
     Attributes:
-        image_links (list): List of image links to download.
+        image_links (dict): Dictionary of image links to download per feature.
         aoi_filepath (str): The filepath to shapefile, geojson or geopackage for area of interest.
         output_dir (Path): Directory where output images will be saved.
+        tif_output (bool): Whether to save images as tif files if False (default) will be npz file.
+        aoi_id (str): The column name in the AOI file to use as the unique ID for search results.
         ratio_band (bool): Whether to calculate a ratio band from dB VV - VH.
-        median_composite (bool): Whether to create a median composite from the images.
         download_all (bool): Whether to download all individual images.
-        median_name (str): The prefix name to give median composite image will have \
-            _asc or _desc suffix recommended to be start and end month year.
     """
 
     def __init__(
@@ -36,24 +38,26 @@ class S1Downloader:
         image_links,
         aoi_filepath,
         output_dir,
+        tif_output=False,
+        aoi_id="OBJECTID",
+        feature_ids=None,
         ratio_band=False,
-        median_composite=False,
         download_all=False,
-        median_name="s1_median",
     ):
 
         self.image_links = image_links
         self.aoi_filepath = aoi_filepath
         self.output_dir = output_dir
+        self.tif_output = tif_output
+        self.aoi_id = aoi_id
+        self.feature_ids = feature_ids
         self.ratio_band = ratio_band
-        self.median_composite = median_composite
         self.download_all = download_all
-        self.median_name = median_name
         self.__logger = logging.getLogger(__name__)
 
-    def _get_window(self, image_link, aoi_gdf):
+    def _get_array(self, image_link, aoi_gdf):
         """
-        Read image window from image link.
+        Read image feature from image link.
         Args:
             image_link (str): The image link to read.
             aoi_gdf (geopandas.GeoDataFrame): The AOI. Only first row used to make window.
@@ -62,24 +66,27 @@ class S1Downloader:
         """
         try:
             with rio.open(image_link) as src:
-                bounds = aoi_gdf.bounds.values[0]
-                window = from_bounds(*bounds, transform=src.transform)
-                img_arr = src.read(window=window)
-                out_transform = src.window_transform(window)
+                aoi_geom = [geom for geom in aoi_gdf.geometry]
+                img_arr, out_transform = mask(src, aoi_geom, crop=True, nodata=-999)
+                if (img_arr == -999).all(): 
+                    return None
+                if not self.tif_output:
+                    return img_arr
                 out_metadata = src.profile.copy()
                 out_metadata.update(
                     height=img_arr.shape[1],
                     width=img_arr.shape[2],
                     transform=out_transform,
+                    nodata=-999,
                     dtype=img_arr.dtype,
                 )
-                self.__logger.info(f"Read array from {image_link}")
+                #self.__logger.info(f"Read array from {image_link}")
                 return img_arr, out_metadata
         except Exception as e:
             self.__logger.error(f"Error reading {image_link}: {e}")
 
     @staticmethod
-    def _write_window(img_arr, out_metadata, output_path):
+    def _write_arr(img_arr, out_metadata, output_path):
         """
         Writes image array to tif file at the specified output path.
         Args:
@@ -123,50 +130,97 @@ class S1Downloader:
         diff = img_arr[0, :, :] - img_arr[1, :, :]
         return np.concatenate([img_arr, diff[np.newaxis, :, :]])
 
-    def download_images(self):
+    def _process_image_tif(self, aoi_gdf, id, img_links):
         """
-        Download images from image links.
+        Clips a list of image files by geometry feature and saves tifs for each.
+        Args:
+            aoi_gdf (GeoDataFrame): A GeoDataFrame containing the area of interest (AOI) geometries.
+            id (str): The identifier for the specific AOI row to process.
+            img_links (list): A list of image URLs or file paths to be processed.
+        Returns:
+            None
         """
-        aoi_gdf = gpd.read_file(self.aoi_filepath)
+        output_folder = Path(self.output_dir) / f"{Path(self.aoi_filepath).stem}_{id}"
+        output_folder.mkdir(parents=True, exist_ok=True)
 
-        if self.median_composite:
-            self.asc_list = []
-            self.desc_list = []
-        else:
-            self.asc_list = None
-            self.desc_list = None
-
-        for image_link in self.image_links:
-            img_arr, out_metadata = self._get_window(image_link, aoi_gdf)
+        aoi_row = aoi_gdf[aoi_gdf[self.aoi_id] == id]
+        for img in img_links:
+            output_fp = (
+                output_folder
+                / f"{Path(img).stem}_{Path(self.aoi_filepath).stem}_{id}.tif"
+            )
+            if Path.exists(output_fp):
+                continue
+            try:
+                img_arr, out_metadata = self._get_array(img, aoi_row)
+            except Exception as e:
+                self.__logger.error(f"Error processing image: {e}")
+                continue
             if self.ratio_band:
                 img_arr = self._calculate_ratio_band(img_arr)
                 out_metadata.update(count=3)
-            if self.median_composite:
-                if "_asc_" in image_link:
-                    self.asc_list.append(img_arr)
-                else:
-                    self.desc_list.append(img_arr)
 
             if self.download_all:
-                output_path = (
-                    Path(self.output_dir)
-                    / f"{Path(image_link).stem}_{Path(self.aoi_filepath).stem}.tif"
-                )
-                self._write_window(img_arr, out_metadata, output_path)
-                self.__logger.info(f"Downloaded {output_path}")
+                self._write_arr(img_arr, out_metadata, output_fp)
+                self.__logger.info(f"Downloaded {output_fp}")
 
-        if self.asc_list:
-            self.__logger.info(f"Calculating median for {len(self.asc_list)} ascending images.")
-            asc_median = self._median_of_arrays(self.asc_list)
-            asc_output_path = Path(self.output_dir) / f"{self.median_name}_asc.tif"
-            self._write_window(asc_median, out_metadata, asc_output_path)
-            self.__logger.info(f"Downloaded {asc_output_path}")
+    def _process_image_npz(self, aoi_gdf, id, img_links):
+        """
+        Clips a list of image files by geometry feature and saves them into one npz file.
+        Args:
+            aoi_gdf (GeoDataFrame): A GeoDataFrame containing the area of interest (AOI) geometries.
+            id (str): The identifier for the specific AOI row to process.
+            img_links (list): A list of image URLs or file paths to process.
+        Returns:
+            None
+        """
+        output_folder = Path(self.output_dir) / f"{Path(self.aoi_filepath).stem}"
+        output_folder.mkdir(parents=True, exist_ok=True)
+        npz_path = output_folder / f"{Path(self.aoi_filepath).stem}_{id}.npz"
+        if Path.exists(npz_path):
+            return
+        aoi_row = aoi_gdf[aoi_gdf[self.aoi_id] == id]
+        #aoi_row.loc[:, "geometry"] = aoi_row["geometry"].buffer(20)
+        img_dict = {}
+        for img in img_links:
+            try:
+                img_arr = self._get_array(img, aoi_row)
+                if img_arr is None:
+                    continue
+                if self.ratio_band:
+                    img_arr = self._calculate_ratio_band(img_arr)
+                img_dict[Path(img).stem] = img_arr
+            except Exception as e:
+                self.__logger.error(f"Error processing image: {e}")
+                continue
+        self.__logger.info(f"Processed {len(img_dict)} images for {id}")
+        np.savez_compressed(npz_path, **img_dict)
+        self.__logger.info(f"Saved image arrays to {npz_path}")
 
-        if self.desc_list:
-            self.__logger.info(f"Calculating median for {len(self.desc_list)} descending images.")
-            desc_median = self._median_of_arrays(self.desc_list)
-            desc_output_path = Path(self.output_dir) / f"{self.median_name}_desc.tif"
-            self._write_window(desc_median, out_metadata, desc_output_path)
-            self.__logger.info(f"Downloaded {desc_output_path}")
+    def download_images(self):
+        """
+        Downloads and saves images to npz or tif files depending on options set.
+        Uses a thread pool to process images concurrently.
+        Raises:
+            Exception: If an error occurs during the processing of an image.
+        """
+        aoi_gdf = gpd.read_file(self.aoi_filepath)
+
+        process_function = (
+            self._process_image_tif if self.tif_output else self._process_image_npz
+        )
+
+        with concurrent.futures.ThreadPoolExecutor() as executor:
+            futures = [
+                executor.submit(process_function, aoi_gdf, id, img_links)
+                for id, img_links in self.image_links.items()
+                if not self.feature_ids or id in self.feature_ids
+            ]
+
+        for future in concurrent.futures.as_completed(futures):
+            try:
+                future.result()
+            except Exception as e:
+                self.__logger.error(f"Error processing image: {e}")
 
         self.__logger.info("Download complete.")
