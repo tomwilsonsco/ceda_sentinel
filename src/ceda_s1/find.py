@@ -8,7 +8,6 @@ import random
 import geopandas as gpd
 import numpy as np
 import rasterio as rio
-from rasterio.windows import from_bounds, shape
 from scipy.ndimage import label
 from shapely.geometry import box
 from tqdm import tqdm
@@ -26,6 +25,7 @@ class FindS1:
         end_date,
         aoi_filepath,
         orbit_numbers=[52, 59, 74, 81, 103, 96, 125, 132, 161, 154, 1, 8, 30, 23],
+        date_images_list=None,
         aoi_id="OBJECTID",
         max_no_data_patch=10,
     ):
@@ -43,11 +43,11 @@ class FindS1:
         self.start_date = start_date
         self.end_date = end_date
         self.orbit_numbers = orbit_numbers
+        self.date_images_list = date_images_list
         self.aoi_filepath = aoi_filepath
         self.aoi_id = aoi_id
         self.max_no_data_patch = max_no_data_patch
         self.base_url = "https://data.ceda.ac.uk/neodc/sentinel_ard/data/sentinel_1"
-        # self.aoi = self._read_aoi_file()
 
         logging.basicConfig(
             level=logging.INFO,
@@ -231,15 +231,18 @@ class FindS1:
             f"Searching for images between {self.start_date} and {self.end_date}"
         )
         date_urls = self._get_existing_folders()
-        img_links = []
-        for url in tqdm(date_urls, "Extracting image links from date folders"):
-            img_links.extend(self._extract_links(url))
+        if not self.date_images_list:
+            img_links = []
+            for url in tqdm(date_urls, "Extracting image links from date folders"):
+                img_links.extend(self._extract_links(url))
+        else:
+            img_links = self.date_images_list
 
-        self.__logger.info(f"Found {len(img_links)} image links.")
+        self.__logger.info(f"Checking {len(img_links)} image links.")
 
         aoi_img_dict = self._aoi_check_images(img_links)
         self.__logger.info(
             f"Returning image search results for {len(aoi_img_dict.keys())} features."
         )
 
-        return aoi_img_dict
+        return aoi_img_dict, img_links

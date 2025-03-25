@@ -65,6 +65,12 @@ def main():
     parser.add_argument(
         "--image-links-pkl",
         type=str,
+        help="The file path to pickle file containing list of image links in date range.\
+            If not specified will search for images.",
+    )
+    parser.add_argument(
+        "--feature-image-pkl",
+        type=str,
         help="The file path to pickle file containing dict of image links per aoi feature.\
             If not specified will search for images.",
     )
@@ -104,20 +110,31 @@ def main():
     args = parser.parse_args()
 
     if not args.image_links_pkl:
+        date_images_list = None
+    else:
+        try:
+            with open(args.image_links_pkl, "rb") as f:
+                date_images_list = pickle.load(f)
+        except FileNotFoundError:
+            logging.error(f"File {args.image_links_pkl} not found.")
+            return
+
+    if not args.feature_image_pkl:
         if not (args.start_date and args.end_date and args.aoi_filepath):
             parser.error(
                 "--start-date, --end-date, \
-                         and --aoi-filepath must be specified if --image-links-pkl is not provided."
+                         and --aoi-filepath must be specified if --feature-image-pkl is not provided."
             )
 
         finder = FindS1(
             start_date=args.start_date,
             end_date=args.end_date,
             orbit_numbers=args.orbit_numbers,
+            date_images_list=date_images_list,
             aoi_filepath=args.aoi_filepath,
             aoi_id=args.aoi_id,
         )
-        img_dict = finder.get_img_feature_dict()
+        img_dict, img_links = finder.get_img_feature_dict()
 
         # Create output directory if it doesn't exist
         output_dir = Path(args.output_dir)
@@ -136,33 +153,38 @@ def main():
 
         logging.info(f"Image link dict saved to {output_file_path}")
 
-    if args.image_links_pkl:
+        output_file_name_links = f"s1_links_all_{args.start_date}_{args.end_date}.pkl"
+
+        output_file_path_links = output_dir / output_file_name_links
+
+        with open(output_file_path_links, "wb") as f:
+            pickle.dump(img_links, f)
+
+        logging.info(f"All image link list saved to {output_file_path_links}")
+
+    if args.feature_image_pkl:
         if not args.download_all:
             parser.error(
                 "--download-all must be specified if --image-links-pkl is provided."
             )
         try:
-            with open(args.image_links_pkl, "rb") as f:
+            with open(args.feature_image_pkl, "rb") as f:
                 img_dict = pickle.load(f)
         except FileNotFoundError:
-            logging.error(f"File {args.image_links_pkl} not found.")
+            logging.error(f"File {args.feature_image_pkl} not found.")
             return
 
     if args.download_all and img_dict:
-
-        download_all = args.download_all if args.download_all else False
-
-        download_tifs = args.download_tifs if args.download_tifs else False
 
         downloader = S1Downloader(
             image_links=img_dict,
             aoi_filepath=args.aoi_filepath,
             output_dir=args.output_dir,
-            tif_output=download_tifs,
+            tif_output=args.download_tifs,
             aoi_id=args.aoi_id,
             feature_ids=args.feature_ids,
             ratio_band=args.no_ratio,
-            download_all=download_all,
+            download_all=args.download_all,
         )
         downloader.download_images()
 

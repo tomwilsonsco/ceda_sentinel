@@ -1,5 +1,6 @@
 import rasterio as rio
 from rasterio.mask import mask
+from rasterio.features import rasterize
 from rasterio.windows import from_bounds
 from shapely.geometry import box
 import geopandas as gpd
@@ -7,6 +8,7 @@ import numpy as np
 from pathlib import Path
 import logging
 import concurrent.futures
+from io import BytesIO
 
 logging.basicConfig(
     level=logging.INFO,
@@ -67,23 +69,43 @@ class S1Downloader:
         try:
             with rio.open(image_link) as src:
                 aoi_geom = [geom for geom in aoi_gdf.geometry]
-                img_arr, out_transform = mask(src, aoi_geom, crop=True, nodata=-999)
-                if (img_arr == -999).all(): 
+                bounds = aoi_gdf.total_bounds
+                window = from_bounds(*bounds, src.transform)
+                img_arr = src.read(window=window)
+                nodata = src.nodata
+                if nodata is not None:
+                    img_arr = np.where(img_arr == nodata, -999, img_arr)
+                    nodata = -999
+                if img_arr.shape[1] == 0 or img_arr.shape[2] == 0:
                     return None
+                if np.all(img_arr == nodata):
+                    return None
+                window_transform = src.window_transform(window)
+
+                mask_arr = rasterize(
+                    [(geom, 1) for geom in aoi_geom],
+                    out_shape=(img_arr.shape[1], img_arr.shape[2]),
+                    transform=window_transform,
+                    fill=0,
+                    all_touched=True,
+                    dtype=np.uint8,
+                )
+
+                img_arr[:, mask_arr == 0] = -999
                 if not self.tif_output:
                     return img_arr
                 out_metadata = src.profile.copy()
                 out_metadata.update(
                     height=img_arr.shape[1],
                     width=img_arr.shape[2],
-                    transform=out_transform,
+                    transform=window_transform,
                     nodata=-999,
                     dtype=img_arr.dtype,
                 )
-                #self.__logger.info(f"Read array from {image_link}")
                 return img_arr, out_metadata
         except Exception as e:
             self.__logger.error(f"Error reading {image_link}: {e}")
+            return None
 
     @staticmethod
     def _write_arr(img_arr, out_metadata, output_path):
@@ -180,7 +202,7 @@ class S1Downloader:
         if Path.exists(npz_path):
             return
         aoi_row = aoi_gdf[aoi_gdf[self.aoi_id] == id]
-        #aoi_row.loc[:, "geometry"] = aoi_row["geometry"].buffer(20)
+        # aoi_row.loc[:, "geometry"] = aoi_row["geometry"].buffer(20)
         img_dict = {}
         for img in img_links:
             try:
