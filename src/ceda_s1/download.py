@@ -121,23 +121,6 @@ class S1Downloader:
         with rio.open(output_path, "w", **out_metadata) as dst:
             dst.write(img_arr)
 
-    @staticmethod
-    def _median_of_arrays(array_list):
-        """
-        Calculate the median of a list of arrays.
-
-        Parameters:
-        array_list (list): A list of numpy arrays.
-
-        Returns:
-        numpy.ndarray: The median array.
-        """
-        if not array_list:
-            return None
-
-        stacked_arrays = np.stack(array_list, axis=0)
-
-        return np.median(stacked_arrays, axis=0)
 
     def _calculate_ratio_band(self, img_arr):
         """
@@ -202,7 +185,6 @@ class S1Downloader:
         if Path.exists(npz_path):
             return
         aoi_row = aoi_gdf[aoi_gdf[self.aoi_id] == id]
-        # aoi_row.loc[:, "geometry"] = aoi_row["geometry"].buffer(20)
         img_dict = {}
         for img in img_links:
             try:
