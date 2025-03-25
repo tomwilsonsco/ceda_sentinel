@@ -237,7 +237,7 @@ class FindS1:
                 img_links.extend(self._extract_links(url))
         else:
             img_links = self.date_images_list
-
+        img_links.sort()
         self.__logger.info(f"Checking {len(img_links)} image links.")
 
         aoi_img_dict = self._aoi_check_images(img_links)
