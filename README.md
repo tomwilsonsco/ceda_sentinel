@@ -48,14 +48,24 @@ To see all the options:
 python src/s2_search.py -h
 ```
 ## Sentinel 1 Process
-Many aspects are the same as the Sentinel 2 search, but there is no cloud cover to consider. Currently plotting is not available as part of the Sentinel 1 search. The process aims to find the ascending and descending images that are entirely covered by input area of interest polygon. Currently the input AOI file should only contain **one geometry**. Only the first feature will be searched to keep processing time down.  
+Many aspects are the same as the Sentinel 2 search, but there is no cloud cover to consider. Currently plotting is not available as part of the Sentinel 1 search. The process aims to find the ascending and descending orbit images that cover area of interest polygons. A time series of images can be downloaded as arrays or geotiffs. 
 
-As well as downloading individual images for the AOI extent, the Sentinel 1 search has option to create and write a median composite image for all images falling within the start and end date period. The composites are created and written as separate ascending and descending orbit images.
+Initially can search for suitable image links for each input aoi feature. The initial search does not read image arrays from CEDA, it just checks the image extents:
 
 ```bash
-python src/s1_search.py --start-date 2018-04-01 --end-date 2018-09-30 --aoi-filepath inputs/aoi_strathbane.shp --orbit-numbers 30 52 103 125 --no-orbit-filter --download-median
+python src/s1_search.py --start-date 2018-06-01 --end-date 2018-06-10 --aoi-filepath inputs/s1_search_features.gpkg --aoi-id id
 ```
-Specifying `--no-orbit-filter` means that all suitable images of the specified relative orbit numbers are retained. Otherwise only the most prevalent relative orbit number per ascending and descending orbit is retained.
+The output of the initial search is two pickle files:
+
+1. `outputs/s1_links_<aoi-file-name>_<start-date>_<end_date>.pkl` is a dictionary where keys are image ids (the column specified by `aoi-id`) and values of lists of direct links to Sentinel 1 images within the specified date range, that the feature falls within.
+
+2. `outputs/s1_links_all_<start-date>_<end-date>.pkl` is a list of all the images (of the specified orbit numbers) within the date range. This is a helper file to speed up subsequent searches using the same date range and is useful if searching over a long time frame for a variety of aoi collections.
+
+Once the initial search is complete, input the first of the two pickle files and specify `--download-all` to download the images. By default the Sentinel 1 images are read as arrays and written into zipped numpy npz files in `<image file name>: array` format. If want tif files instead specify `download-tifs` too.
+
+```bash
+python src/s1_search.py --aoi-filepath inputs/s1_search_features.gpkg --aoi-id id --download-all --feature-image-pkl outputs/s1_links_s1_search_features_2018-06-01_2018-06-10.pkl
+```
 
 It is recommended to review all options by specifying:
 
