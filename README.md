@@ -84,3 +84,9 @@ forwarding. Currently plotting images is an optional for the Sentinel 2 search o
  docker run --rm -i -t -e DISPLAY=$DISPLAY -v /tmp/.X11-unix:/tmp/.X11-unix \
  -p 127.0.0.1:8888:8888 -w /app --mount type=bind,src="$(pwd)",target=/app ceda
 ```
+
+## Test script
+An integration test that downloads S1 images for two small features from CEDA and compares with pre-existing outputs was created under `tests/`. To run just cd to the repo in a terminal and run:
+```bash
+pytest
+```

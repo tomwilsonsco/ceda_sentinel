@@ -121,7 +121,6 @@ class S1Downloader:
         with rio.open(output_path, "w", **out_metadata) as dst:
             dst.write(img_arr)
 
-
     def _calculate_ratio_band(self, img_arr):
         """
         Calculate the ratio band from dB VV - VH.
