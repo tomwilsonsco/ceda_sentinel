@@ -1,6 +1,6 @@
 {
   "name": "ceda sentinel",
-  "image": "python:3.12.4-bookworm",
+  "image": "ceda-sentinel:dev",
   "build": {
       "dockerfile": "Dockerfile",
       "context": "..",
