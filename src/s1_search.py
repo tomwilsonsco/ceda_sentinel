@@ -106,6 +106,11 @@ def main():
         help="Optional list of ids to download images for if wish to test subset \
             without long download times. Should be space separated.",
     )
+    parser.add_argument(
+        "--no-multi-threads",
+        action="store_false",
+        help="If specified will not use multi-threading for downloading.",
+    )
 
     args = parser.parse_args()
 
@@ -185,6 +190,7 @@ def main():
             feature_ids=args.feature_ids,
             ratio_band=args.no_ratio,
             download_all=args.download_all,
+            use_threads=args.no_multi_threads,
         )
         downloader.download_images()
 
