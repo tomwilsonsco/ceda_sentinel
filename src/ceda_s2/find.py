@@ -5,7 +5,7 @@ from bs4 import BeautifulSoup
 import time
 import random
 from datetime import datetime, timedelta
-from shapely.geometry import Polygon, box
+from shapely.geometry import Polygon, MultiPolygon, box
 from fiona.drvsupport import supported_drivers
 import geopandas as gpd
 import pandas as pd
@@ -132,7 +132,7 @@ class FindS2:
             GeoDataFrame: The AOI GeoDataFrame, reprojected to EPSG:27700 if necessary.
         """
         # Check if all geometries are of type Polygon
-        if not all(isinstance(geom, Polygon) for geom in self.aoi.geometry):
+        if not all(isinstance(geom, (Polygon, MultiPolygon)) for geom in self.aoi.geometry):
             raise ValueError("AOI must be of geometry type Polygon.")
 
         # Check CRS and reproject if necessary
