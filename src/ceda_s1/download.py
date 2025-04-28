@@ -31,8 +31,10 @@ class S1Downloader:
         output_dir (Path): Directory where output images will be saved.
         tif_output (bool): Whether to save images as tif files if False (default) will be npz file.
         aoi_id (str): The column name in the AOI file to use as the unique ID for search results.
+        feature_ids (list): List of feature IDs to process. If None, all features will be processed.
         ratio_band (bool): Whether to calculate a ratio band from dB VV - VH.
         download_all (bool): Whether to download all individual images.
+        use_threads (bool): Whether to use multi-threading faster for downloading. Default is True.
     """
 
     def __init__(
@@ -45,6 +47,7 @@ class S1Downloader:
         feature_ids=None,
         ratio_band=False,
         download_all=False,
+        use_threads=True,
     ):
 
         self.image_links = image_links
@@ -55,6 +58,7 @@ class S1Downloader:
         self.feature_ids = feature_ids
         self.ratio_band = ratio_band
         self.download_all = download_all
+        self.use_threads = use_threads
         self.__logger = logging.getLogger(__name__)
 
     def _get_array(self, image_link, aoi_gdf):
@@ -203,7 +207,7 @@ class S1Downloader:
     def download_images(self):
         """
         Downloads and saves images to npz or tif files depending on options set.
-        Uses a thread pool to process images concurrently.
+        Uses a thread pool to process images concurrently if self.use_threads is True.
         Raises:
             Exception: If an error occurs during the processing of an image.
         """
@@ -213,17 +217,26 @@ class S1Downloader:
             self._process_image_tif if self.tif_output else self._process_image_npz
         )
 
-        with concurrent.futures.ThreadPoolExecutor() as executor:
-            futures = [
-                executor.submit(process_function, aoi_gdf, id, img_links)
-                for id, img_links in self.image_links.items()
-                if not self.feature_ids or id in self.feature_ids
-            ]
+        if self.use_threads:
+            with concurrent.futures.ThreadPoolExecutor() as executor:
+                futures = [
+                    executor.submit(process_function, aoi_gdf, id, img_links)
+                    for id, img_links in self.image_links.items()
+                    if not self.feature_ids or id in self.feature_ids
+                ]
 
-        for future in concurrent.futures.as_completed(futures):
-            try:
-                future.result()
-            except Exception as e:
-                self.__logger.error(f"Error processing image: {e}")
+            for future in concurrent.futures.as_completed(futures):
+                try:
+                    future.result()
+                except Exception as e:
+                    self.__logger.error(f"Error processing image: {e}")
+        else:
+            for id, img_links in self.image_links.items():
+                if not self.feature_ids or id in self.feature_ids:
+                    try:
+                        process_function(aoi_gdf, id, img_links)
+                    except Exception as e:
+                        self.__logger.error(f"Error processing image: {e}")
+
 
         self.__logger.info("Download complete.")
