@@ -238,5 +238,4 @@ class S1Downloader:
                     except Exception as e:
                         self.__logger.error(f"Error processing image: {e}")
 
-
         self.__logger.info("Download complete.")

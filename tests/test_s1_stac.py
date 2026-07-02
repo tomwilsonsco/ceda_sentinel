@@ -4,6 +4,7 @@ Integration tests for Sentinel-1 STAC API search (FindS1STAC).
 These tests require network access to the CEDA STAC API and use recent data (2024+)
 since historical data (pre-2024) is not yet indexed in the STAC API.
 """
+
 import pytest
 import geopandas as gpd
 from ceda_s1 import FindS1STAC
@@ -21,7 +22,7 @@ class TestFindS1STAC:
     def test_stac_search_recent_data(self, aoi_filepath):
         """
         Test STAC search with recent data (2024).
-        
+
         This test verifies that:
         1. FindS1STAC can be instantiated
         2. STAC search returns results for recent dates
@@ -43,14 +44,16 @@ class TestFindS1STAC:
 
         # Verify that we got some results (STAC should have 2024 data)
         # Note: We can't guarantee exact counts due to data availability
-        assert len(img_dict) > 0 or len(img_links) == 0, \
-            "Either got results or empty search (both are valid)"
+        assert (
+            len(img_dict) > 0 or len(img_links) == 0
+        ), "Either got results or empty search (both are valid)"
 
         # Verify that all image links are valid URLs
         for link in img_links:
             assert link.startswith("https://"), f"Invalid URL: {link}"
-            assert "dap.ceda.ac.uk" in link or "data.ceda.ac.uk" in link, \
-                f"URL should be from CEDA: {link}"
+            assert (
+                "dap.ceda.ac.uk" in link or "data.ceda.ac.uk" in link
+            ), f"URL should be from CEDA: {link}"
 
     def test_stac_search_output_format(self, aoi_filepath):
         """
@@ -81,8 +84,9 @@ class TestFindS1STAC:
         dict_links = []
         for links in img_dict.values():
             dict_links.extend(links)
-        assert set(img_links) == set(dict_links), \
-            "Flat list should contain all links from dictionary"
+        assert set(img_links) == set(
+            dict_links
+        ), "Flat list should contain all links from dictionary"
 
     def test_stac_orbit_filtering(self, aoi_filepath):
         """
@@ -144,8 +148,9 @@ class TestFindS1STAC:
         img_dict, img_links = finder.get_img_feature_dict()
 
         # Should return empty results with a warning
-        assert len(img_dict) == 0 or all(len(links) == 0 for links in img_dict.values()), \
-            "Should return empty results for non-indexed historical data"
+        assert len(img_dict) == 0 or all(
+            len(links) == 0 for links in img_dict.values()
+        ), "Should return empty results for non-indexed historical data"
 
     def test_stac_gb_osgb_filtering(self, aoi_filepath):
         """
@@ -163,8 +168,7 @@ class TestFindS1STAC:
 
         # Verify all returned images are GB_OSGB
         for link in img_links:
-            assert "GB_OSGB" in link, \
-                f"All images should be GB_OSGB projection: {link}"
+            assert "GB_OSGB" in link, f"All images should be GB_OSGB projection: {link}"
 
 
 if __name__ == "__main__":

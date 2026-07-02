@@ -4,6 +4,7 @@ Integration tests for Sentinel-2 STAC API search (FindS2STAC).
 These tests require network access to the CEDA STAC API and use recent data (2024+)
 since historical data may not be fully indexed in the STAC API.
 """
+
 import pytest
 import geopandas as gpd
 import pandas as pd
@@ -28,7 +29,7 @@ class TestFindS2STAC:
     def test_stac_search_recent_data(self, aoi_gdf):
         """
         Test STAC search with recent data (2024).
-        
+
         This test verifies that:
         1. FindS2STAC can be instantiated
         2. STAC search returns results for recent dates
@@ -48,10 +49,18 @@ class TestFindS2STAC:
 
         # Verify output format
         if result_gdf is not None:
-            assert isinstance(result_gdf, gpd.GeoDataFrame), "Output should be a GeoDataFrame"
-            assert "image_link" in result_gdf.columns, "Output should have image_link column"
-            assert "image_date" in result_gdf.columns, "Output should have image_date column"
-            assert "s2cloudles" in result_gdf.columns, "Output should have s2cloudles column"
+            assert isinstance(
+                result_gdf, gpd.GeoDataFrame
+            ), "Output should be a GeoDataFrame"
+            assert (
+                "image_link" in result_gdf.columns
+            ), "Output should have image_link column"
+            assert (
+                "image_date" in result_gdf.columns
+            ), "Output should have image_date column"
+            assert (
+                "s2cloudles" in result_gdf.columns
+            ), "Output should have s2cloudles column"
 
             # Verify that we got some results
             valid_images = result_gdf[result_gdf["image_link"].notna()]
@@ -60,8 +69,9 @@ class TestFindS2STAC:
             # Verify that all image links are valid URLs
             for link in valid_images["image_link"]:
                 assert link.startswith("https://"), f"Invalid URL: {link}"
-                assert "dap.ceda.ac.uk" in link or "data.ceda.ac.uk" in link, \
-                    f"URL should be from CEDA: {link}"
+                assert (
+                    "dap.ceda.ac.uk" in link or "data.ceda.ac.uk" in link
+                ), f"URL should be from CEDA: {link}"
 
     def test_stac_search_output_format(self, aoi_gdf):
         """
@@ -135,7 +145,9 @@ class TestFindS2STAC:
         result_gdf = finder.find_image_links()
 
         # Should return None or empty GeoDataFrame with a warning
-        if result_gdf is None or (isinstance(result_gdf, gpd.GeoDataFrame) and result_gdf.empty):
+        if result_gdf is None or (
+            isinstance(result_gdf, gpd.GeoDataFrame) and result_gdf.empty
+        ):
             assert True, "Should return empty results for non-indexed historical data"
 
     def test_stac_cog_url_format(self, aoi_gdf):
@@ -183,7 +195,9 @@ class TestFindS2STAC:
             for date in valid_dates:
                 # Verify date format YYYY-MM-DD
                 assert len(date) == 10, f"Date should be YYYY-MM-DD format: {date}"
-                assert date[4] == "-" and date[7] == "-", f"Date format incorrect: {date}"
+                assert (
+                    date[4] == "-" and date[7] == "-"
+                ), f"Date format incorrect: {date}"
 
 
 if __name__ == "__main__":

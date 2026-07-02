@@ -4,6 +4,7 @@ Sentinel-1 STAC API search implementation.
 This module provides FindS1STAC class that uses the CEDA STAC API
 for searching Sentinel-1 ARD data instead of HTML directory scraping.
 """
+
 import logging
 from datetime import datetime
 import geopandas as gpd
@@ -107,8 +108,8 @@ class FindS1STAC:
             "op": "in",
             "args": [
                 {"property": "sat:relative_orbit"},
-                [str(o) for o in self.orbit_numbers]
-            ]
+                [str(o) for o in self.orbit_numbers],
+            ],
         }
 
     def _build_platform_filter(self):
@@ -121,13 +122,7 @@ class FindS1STAC:
         if not self.platform:
             return None
 
-        return {
-            "op": "=",
-            "args": [
-                {"property": "platform"},
-                self.platform
-            ]
-        }
+        return {"op": "=", "args": [{"property": "platform"}, self.platform]}
 
     def _build_orbit_state_filter(self):
         """
@@ -139,13 +134,7 @@ class FindS1STAC:
         if not self.orbit_state:
             return None
 
-        return {
-            "op": "=",
-            "args": [
-                {"property": "sat:orbit_state"},
-                self.orbit_state
-            ]
-        }
+        return {"op": "=", "args": [{"property": "sat:orbit_state"}, self.orbit_state]}
 
     def _build_combined_filter(self):
         """
@@ -248,9 +237,7 @@ class FindS1STAC:
             try:
                 item_geom = shape(item.geometry)
             except Exception as e:
-                self.__logger.error(
-                    f"Error reading geometry for item {item.id}: {e}"
-                )
+                self.__logger.error(f"Error reading geometry for item {item.id}: {e}")
                 continue
 
             intersect_aoi = aoi_gdf[aoi_gdf.within(item_geom)]
@@ -260,9 +247,7 @@ class FindS1STAC:
             # Extract image URL from STAC asset
             img_link = extract_image_url_from_item(item, S1_DATA_ASSET)
             if not img_link:
-                self.__logger.warning(
-                    f"No data asset found for item {item.id}"
-                )
+                self.__logger.warning(f"No data asset found for item {item.id}")
                 continue
 
             ids = intersect_aoi[self.aoi_id].astype("uint16").to_list()
@@ -272,9 +257,7 @@ class FindS1STAC:
                 retained_images[id] = current
 
         if orbits:
-            self.__logger.info(
-                f"Found images for relative orbits {' '.join(orbits)}"
-            )
+            self.__logger.info(f"Found images for relative orbits {' '.join(orbits)}")
         return retained_images
 
     def get_img_feature_dict(self):

@@ -4,6 +4,7 @@ Shared CEDA STAC API client utilities.
 This module provides constants and utility functions for interacting with
 the CEDA STAC API (https://api.stac.ceda.ac.uk/).
 """
+
 from pystac_client import Client
 
 # API endpoint
@@ -156,7 +157,8 @@ def extract_tile_from_item_id(item_id):
         str or None: The MGRS tile ID (e.g., 'T30UXG') or None if not found.
     """
     import re
-    match = re.search(r'_(T\d{2}[A-Z]{3})_', item_id)
+
+    match = re.search(r"_(T\d{2}[A-Z]{3})_", item_id)
     if match:
         return match.group(1)
     return None

@@ -27,10 +27,8 @@ def validate_date(date_str):
 
 
 def main():
-    parser = argparse.ArgumentParser(
-        description="Search for Sentinel-1 data within a \
-                                     specified date range from CEDA archive."
-    )
+    parser = argparse.ArgumentParser(description="Search for Sentinel-1 data within a \
+                                     specified date range from CEDA archive.")
     parser.add_argument(
         "--start-date",
         type=validate_date,
@@ -139,6 +137,7 @@ def main():
 
         if args.use_stac:
             from ceda_s1 import FindS1STAC
+
             finder = FindS1STAC(
                 start_date=args.start_date,
                 end_date=args.end_date,

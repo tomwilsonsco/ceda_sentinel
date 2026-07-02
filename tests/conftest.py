@@ -3,6 +3,7 @@ Pytest configuration for ceda_sentinel tests.
 
 Adds the src directory to sys.path to enable imports of ceda_s1, ceda_s2, etc.
 """
+
 import sys
 from pathlib import Path
 

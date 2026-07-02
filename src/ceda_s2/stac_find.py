@@ -4,6 +4,7 @@ Sentinel-2 STAC API search implementation.
 This module provides FindS2STAC class that uses the CEDA STAC API
 for searching Sentinel-2 ARD data instead of HTML directory scraping.
 """
+
 import logging
 import re
 from datetime import datetime
@@ -114,7 +115,9 @@ class FindS2STAC:
         from shapely.geometry import Polygon, MultiPolygon
 
         # Check if all geometries are of type Polygon
-        if not all(isinstance(geom, (Polygon, MultiPolygon)) for geom in self.aoi.geometry):
+        if not all(
+            isinstance(geom, (Polygon, MultiPolygon)) for geom in self.aoi.geometry
+        ):
             raise ValueError("AOI must be of geometry type Polygon.")
 
         # Check CRS and reproject if necessary
@@ -144,10 +147,7 @@ class FindS2STAC:
         if self.tile_cloud_max < 100:
             return {
                 "op": "<=",
-                "args": [
-                    {"property": "eo:cloud_cover"},
-                    self.tile_cloud_max
-                ]
+                "args": [{"property": "eo:cloud_cover"}, self.tile_cloud_max],
             }
         return None
 
@@ -163,13 +163,7 @@ class FindS2STAC:
 
         # Note: The 'tile' property may not be reliably populated in the STAC API
         # This filter may not work as expected
-        return {
-            "op": "in",
-            "args": [
-                {"property": "tile"},
-                self.tile_list
-            ]
-        }
+        return {"op": "in", "args": [{"property": "tile"}, self.tile_list]}
 
     def _build_combined_filter(self):
         """

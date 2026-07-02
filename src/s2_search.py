@@ -178,6 +178,7 @@ def get_images(
         )
         if use_stac:
             from ceda_s2 import FindS2STAC
+
             s2_finder = FindS2STAC(
                 search_features,
                 start_date,

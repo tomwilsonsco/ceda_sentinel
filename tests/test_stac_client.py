@@ -3,6 +3,7 @@ Unit tests for ceda_stac.client module.
 
 These tests verify the utility functions and constants in the shared STAC client module.
 """
+
 import pytest
 from datetime import datetime
 from ceda_stac.client import (
@@ -138,43 +139,43 @@ class TestExtractDateFromItem:
 
     def test_standard_datetime(self):
         """Test extraction from standard ISO datetime."""
-        item = {
-            "properties": {
-                "datetime": "2024-06-02T18:16:37Z"
-            }
-        }
+        item = {"properties": {"datetime": "2024-06-02T18:16:37Z"}}
+
         # Mock object with properties attribute
         class MockItem:
             def __init__(self, properties):
                 self.properties = properties
-        
+
         result = extract_date_from_item(MockItem(item["properties"]))
         assert result == "2024-06-02"
 
     def test_different_datetime(self):
         """Test extraction from different datetime."""
+
         class MockItem:
             def __init__(self, properties):
                 self.properties = properties
-        
+
         result = extract_date_from_item(MockItem({"datetime": "2024-12-31T23:59:59Z"}))
         assert result == "2024-12-31"
 
     def test_no_datetime_property(self):
         """Test when datetime property is missing."""
+
         class MockItem:
             def __init__(self, properties):
                 self.properties = properties
-        
+
         result = extract_date_from_item(MockItem({}))
         assert result is None
 
     def test_invalid_datetime_format(self):
         """Test with invalid datetime format."""
+
         class MockItem:
             def __init__(self, properties):
                 self.properties = properties
-        
+
         # Should still work if there's a T separator
         result = extract_date_from_item(MockItem({"datetime": "invalid"}))
         assert result == "invalid"
@@ -185,44 +186,61 @@ class TestExtractImageUrlFromItem:
 
     def test_extract_data_asset(self):
         """Test extracting data asset URL."""
+
         class MockAsset:
             def __init__(self, href):
                 self.href = href
-        
+
         class MockItem:
             def __init__(self, assets):
                 self.assets = assets
-        
-        item = MockItem({
-            "data": MockAsset("https://dap.ceda.ac.uk/neodc/sentinel_ard/data/sentinel_1/2024/06/02/test.tif")
-        })
-        
+
+        item = MockItem(
+            {
+                "data": MockAsset(
+                    "https://dap.ceda.ac.uk/neodc/sentinel_ard/data/sentinel_1/2024/06/02/test.tif"
+                )
+            }
+        )
+
         result = extract_image_url_from_item(item, "data")
-        assert result == "https://dap.ceda.ac.uk/neodc/sentinel_ard/data/sentinel_1/2024/06/02/test.tif"
+        assert (
+            result
+            == "https://dap.ceda.ac.uk/neodc/sentinel_ard/data/sentinel_1/2024/06/02/test.tif"
+        )
 
     def test_extract_cog_asset(self):
         """Test extracting COG asset URL."""
+
         class MockAsset:
             def __init__(self, href):
                 self.href = href
-        
+
         class MockItem:
             def __init__(self, assets):
                 self.assets = assets
-        
-        item = MockItem({
-            "cog": MockAsset("https://dap.ceda.ac.uk/neodc/sentinel_ard/data/sentinel_2/2024/06/02/test.tif")
-        })
-        
+
+        item = MockItem(
+            {
+                "cog": MockAsset(
+                    "https://dap.ceda.ac.uk/neodc/sentinel_ard/data/sentinel_2/2024/06/02/test.tif"
+                )
+            }
+        )
+
         result = extract_image_url_from_item(item, "cog")
-        assert result == "https://dap.ceda.ac.uk/neodc/sentinel_ard/data/sentinel_2/2024/06/02/test.tif"
+        assert (
+            result
+            == "https://dap.ceda.ac.uk/neodc/sentinel_ard/data/sentinel_2/2024/06/02/test.tif"
+        )
 
     def test_missing_asset(self):
         """Test when asset key is missing."""
+
         class MockItem:
             def __init__(self, assets):
                 self.assets = assets
-        
+
         item = MockItem({})
         result = extract_image_url_from_item(item, "data")
         assert result is None
@@ -233,27 +251,36 @@ class TestExtractCloudUrlFromItem:
 
     def test_extract_cloud_asset(self):
         """Test extracting cloud asset URL."""
+
         class MockAsset:
             def __init__(self, href):
                 self.href = href
-        
+
         class MockItem:
             def __init__(self, assets):
                 self.assets = assets
-        
-        item = MockItem({
-            "cloud": MockAsset("https://dap.ceda.ac.uk/neodc/sentinel_ard/data/sentinel_2/2024/06/02/clouds.tif")
-        })
-        
+
+        item = MockItem(
+            {
+                "cloud": MockAsset(
+                    "https://dap.ceda.ac.uk/neodc/sentinel_ard/data/sentinel_2/2024/06/02/clouds.tif"
+                )
+            }
+        )
+
         result = extract_cloud_url_from_item(item)
-        assert result == "https://dap.ceda.ac.uk/neodc/sentinel_ard/data/sentinel_2/2024/06/02/clouds.tif"
+        assert (
+            result
+            == "https://dap.ceda.ac.uk/neodc/sentinel_ard/data/sentinel_2/2024/06/02/clouds.tif"
+        )
 
     def test_missing_cloud_asset(self):
         """Test when cloud asset is missing."""
+
         class MockItem:
             def __init__(self, assets):
                 self.assets = assets
-        
+
         item = MockItem({})
         result = extract_cloud_url_from_item(item)
         assert result is None
@@ -264,58 +291,74 @@ class TestIsGbOsgbItem:
 
     def test_s1_gb_osgb(self):
         """Test S1 item with GB_OSGB in data asset."""
+
         class MockAsset:
             def __init__(self, href):
                 self.href = href
-        
+
         class MockItem:
             def __init__(self, assets):
                 self.assets = assets
-        
-        item = MockItem({
-            "data": MockAsset("https://dap.ceda.ac.uk/neodc/sentinel_ard/data/sentinel_1/2024/06/02/S1A_20240602_1_asc_GB_OSGB_RTCK_SpkRL.tif")
-        })
-        
+
+        item = MockItem(
+            {
+                "data": MockAsset(
+                    "https://dap.ceda.ac.uk/neodc/sentinel_ard/data/sentinel_1/2024/06/02/S1A_20240602_1_asc_GB_OSGB_RTCK_SpkRL.tif"
+                )
+            }
+        )
+
         assert is_gb_osgb_item(item) is True
 
     def test_s1_non_gb_osgb(self):
         """Test S1 item without GB_OSGB in data asset."""
+
         class MockAsset:
             def __init__(self, href):
                 self.href = href
-        
+
         class MockItem:
             def __init__(self, assets):
                 self.assets = assets
-        
-        item = MockItem({
-            "data": MockAsset("https://dap.ceda.ac.uk/neodc/sentinel_ard/data/sentinel_1/2024/06/02/S1A_20240602_1_asc_NI_TM65_RTCK_SpkRL.tif")
-        })
-        
+
+        item = MockItem(
+            {
+                "data": MockAsset(
+                    "https://dap.ceda.ac.uk/neodc/sentinel_ard/data/sentinel_1/2024/06/02/S1A_20240602_1_asc_NI_TM65_RTCK_SpkRL.tif"
+                )
+            }
+        )
+
         assert is_gb_osgb_item(item) is False
 
     def test_s2_osgb(self):
         """Test S2 item with osgb in cog asset."""
+
         class MockAsset:
             def __init__(self, href):
                 self.href = href
-        
+
         class MockItem:
             def __init__(self, assets):
                 self.assets = assets
-        
-        item = MockItem({
-            "cog": MockAsset("https://dap.ceda.ac.uk/neodc/sentinel_ard/data/sentinel_2/2024/06/02/S2A_20240624_osgb_test.tif")
-        })
-        
+
+        item = MockItem(
+            {
+                "cog": MockAsset(
+                    "https://dap.ceda.ac.uk/neodc/sentinel_ard/data/sentinel_2/2024/06/02/S2A_20240624_osgb_test.tif"
+                )
+            }
+        )
+
         assert is_gb_osgb_item(item) is True
 
     def test_item_without_assets(self):
         """Test item without relevant assets."""
+
         class MockItem:
             def __init__(self, assets):
                 self.assets = assets
-        
+
         item = MockItem({})
         assert is_gb_osgb_item(item) is False
 
