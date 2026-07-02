@@ -85,8 +85,57 @@ forwarding. Currently plotting images is an optional for the Sentinel 2 search o
  -p 127.0.0.1:8888:8888 -w /app --mount type=bind,src="$(pwd)",target=/app ceda
 ```
 
+## STAC API Search (Recommended for Recent Data)
+
+As of 2024, the CEDA STAC API (https://api.stac.ceda.ac.uk/) provides a more efficient way to search for Sentinel-1 and Sentinel-2 ARD data. Both search scripts now support a `--use-stac` flag that uses the STAC API instead of HTML directory scraping.
+
+### Benefits of STAC API Search
+
+- **Server-side filtering**: Spatial, temporal, and property filters are applied on the server
+- **Faster searches**: No need to iterate day-by-day through HTML directory listings
+- **Reduced data transfer**: Server-side cloud cover filtering (S2) reduces unnecessary downloads
+- **Standardized interface**: Uses STAC API specification for consistent data access
+
+### Using STAC API with Sentinel-2
+
+```bash
+python src/s2_search.py --search-features inputs/test_search.gpkg \
+--start-date 2024-04-01 --end-date 2024-05-31 --use-stac --plot --download
+```
+
+The `--use-stac` flag enables STAC API search with server-side cloud cover filtering.
+
+### Using STAC API with Sentinel-1
+
+```bash
+python src/s1_search.py --start-date 2024-06-01 --end-date 2024-06-10 \
+--aoi-filepath inputs/s1_search_features.gpkg --aoi-id id --use-stac
+```
+
+### Data Coverage Limitations
+
+**Important**: The STAC API does not currently have all historical data indexed:
+
+- **Sentinel-1 ARD**: Data from 2024 onwards is indexed in the STAC API. Historical data (pre-2024) is not yet available and will return no results. For historical data, use the default HTML scraping approach (without `--use-stac`).
+- **Sentinel-2 ARD**: Recent data is available, but coverage may vary for older dates.
+
+If the STAC search returns no results for your date range, try running without the `--use-stac` flag to use the HTML scraping approach instead.
+
+### Additional Filtering Options
+
+When using `--use-stac`, you can still use all existing filtering options:
+
+- **Orbit filtering** (S1): `--orbit-numbers 1 125 132`
+- **Cloud cover filtering** (S2): `--tile-cloud-percent 20 --feature-cloud-percent 10`
+- **AOI filtering**: All AOI-based filtering works identically
+
 ## Test script
 An integration test that downloads S1 images for two small features from CEDA and compares with pre-existing outputs was created under `tests/`. To run just cd to the repo in a terminal and run:
 ```bash
 pytest
+```
+
+To run only the STAC API tests:
+```bash
+pytest -m integration
 ```
