@@ -129,7 +129,8 @@ class ImageDownloader:
             height=window_data.shape[1],
         )
         with rio.open(output_file, "w", **prof) as f:
-            f.descriptions = tuple(self.band_descriptions)
+            if self.band_descriptions is not None:
+                f.descriptions = tuple(self.band_descriptions)
             f.write(window_data)
             self.__logger.info(f"written {output_file}")
 
@@ -142,5 +143,5 @@ class ImageDownloader:
                 lambda x: isinstance(x, str) and x.startswith("http")
             )
         ]
-        for i, row in self.gdf.iterrows():
+        for i, (_, row) in enumerate(self.gdf.iterrows()):
             self._write_window(*self._read_from_row(i, row))
