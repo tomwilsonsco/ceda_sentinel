@@ -132,7 +132,9 @@ class FindS2:
             GeoDataFrame: The AOI GeoDataFrame, reprojected to EPSG:27700 if necessary.
         """
         # Check if all geometries are of type Polygon
-        if not all(isinstance(geom, (Polygon, MultiPolygon)) for geom in self.aoi.geometry):
+        if not all(
+            isinstance(geom, (Polygon, MultiPolygon)) for geom in self.aoi.geometry
+        ):
             raise ValueError("AOI must be of geometry type Polygon.")
 
         # Check CRS and reproject if necessary

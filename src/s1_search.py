@@ -27,10 +27,8 @@ def validate_date(date_str):
 
 
 def main():
-    parser = argparse.ArgumentParser(
-        description="Search for Sentinel-1 data within a \
-                                     specified date range from CEDA archive."
-    )
+    parser = argparse.ArgumentParser(description="Search for Sentinel-1 data within a \
+                                     specified date range from CEDA archive.")
     parser.add_argument(
         "--start-date",
         type=validate_date,
@@ -61,6 +59,12 @@ def main():
         default="OBJECTID",
         help="The name of the field containing unique ids for aoi features. \
             Defaults to OBJECTID.",
+    )
+    parser.add_argument(
+        "--use-stac",
+        action="store_true",
+        help="Use the CEDA STAC API for searching instead of HTML directory scraping. \
+            Recommended for recent data (2024+). May not have historical data indexed.",
     )
     parser.add_argument(
         "--image-links-pkl",
@@ -131,14 +135,25 @@ def main():
                          and --aoi-filepath must be specified if --feature-image-pkl is not provided."
             )
 
-        finder = FindS1(
-            start_date=args.start_date,
-            end_date=args.end_date,
-            orbit_numbers=args.orbit_numbers,
-            date_images_list=date_images_list,
-            aoi_filepath=args.aoi_filepath,
-            aoi_id=args.aoi_id,
-        )
+        if args.use_stac:
+            from ceda_s1 import FindS1STAC
+
+            finder = FindS1STAC(
+                start_date=args.start_date,
+                end_date=args.end_date,
+                orbit_numbers=args.orbit_numbers,
+                aoi_filepath=args.aoi_filepath,
+                aoi_id=args.aoi_id,
+            )
+        else:
+            finder = FindS1(
+                start_date=args.start_date,
+                end_date=args.end_date,
+                orbit_numbers=args.orbit_numbers,
+                date_images_list=date_images_list,
+                aoi_filepath=args.aoi_filepath,
+                aoi_id=args.aoi_id,
+            )
         img_dict, img_links = finder.get_img_feature_dict()
 
         # Create output directory if it doesn't exist

@@ -128,6 +128,7 @@ def get_images(
     tile_cloud_percent,
     feature_cloud_percent,
     min_cloud_only,
+    use_stac=False,
 ):
     """
     Search for Sentinel 2 images based on provided geographical features and date range.
@@ -175,15 +176,28 @@ def get_images(
         logging.info(
             f"Searching for Sentinel 2 images for {search_features.shape[0]} features..."
         )
-        s2_finder = FindS2(
-            search_features,
-            start_date,
-            end_date,
-            check_img_cloud=tile_cloud_percent < 100,
-            tile_cloud_max=tile_cloud_percent,
-            s2cloudless_max=feature_cloud_percent,
-            min_cloud_only=min_cloud_only,
-        )
+        if use_stac:
+            from ceda_s2 import FindS2STAC
+
+            s2_finder = FindS2STAC(
+                search_features,
+                start_date,
+                end_date,
+                check_img_cloud=tile_cloud_percent < 100,
+                tile_cloud_max=tile_cloud_percent,
+                s2cloudless_max=feature_cloud_percent,
+                min_cloud_only=min_cloud_only,
+            )
+        else:
+            s2_finder = FindS2(
+                search_features,
+                start_date,
+                end_date,
+                check_img_cloud=tile_cloud_percent < 100,
+                tile_cloud_max=tile_cloud_percent,
+                s2cloudless_max=feature_cloud_percent,
+                min_cloud_only=min_cloud_only,
+            )
         image_features = s2_finder.find_image_links()
     else:
         logging.info(
@@ -314,6 +328,13 @@ def main():
         help="Only the least cloudy image for each feature is retained.",
     )
 
+    parser.add_argument(
+        "--use-stac",
+        action="store_true",
+        help="Use the CEDA STAC API for searching instead of HTML directory scraping. \
+            Recommended for recent data. Provides server-side cloud cover filtering.",
+    )
+
     args = parser.parse_args()
 
     # Convert paths to Pathlib objects
@@ -366,6 +387,7 @@ def main():
         tile_cloud,
         feature_cloud,
         args.min_cloud_only,
+        use_stac=args.use_stac,
     )
 
 
