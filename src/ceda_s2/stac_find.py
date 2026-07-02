@@ -6,14 +6,12 @@ for searching Sentinel-2 ARD data instead of HTML directory scraping.
 """
 
 import logging
-import re
-from datetime import datetime
-from shapely.geometry import shape, box
-from rasterio.windows import from_bounds
+from shapely.geometry import shape
 import geopandas as gpd
+import rasterio as rio
+from rasterio.windows import from_bounds
 import pandas as pd
 import numpy as np
-from tqdm import tqdm
 
 from ceda_stac.client import (
     get_stac_client,
@@ -24,7 +22,6 @@ from ceda_stac.client import (
     extract_tile_from_item_id,
     S2_ARD_COLLECTION,
     S2_COG_ASSET,
-    S2_CLOUD_ASSET,
 )
 
 
@@ -269,6 +266,9 @@ class FindS2STAC:
         """
         Checks whether the geometry in a GeoDataFrame row intersects item bounds.
 
+        Converts the STAC item geometry to the AOI's CRS before performing
+        the intersection check to ensure consistent coordinate systems.
+
         Args:
             gdf_row (GeoSeries): A row from a GeoDataFrame with a geometry.
             item: A pystac.Item object.
@@ -278,7 +278,11 @@ class FindS2STAC:
         """
         try:
             item_geom = shape(item.geometry)
-            return gdf_row.geometry.intersects(item_geom)
+            # Convert item geometry to the AOI's CRS for accurate intersection
+            item_geom_reprojected = (
+                gpd.GeoSeries([item_geom], crs="EPSG:4326").to_crs(self.aoi.crs).iloc[0]
+            )
+            return gdf_row.geometry.intersects(item_geom_reprojected)
         except Exception as e:
             self.__logger.error(f"Cannot read item geometry: {e}")
             return False
@@ -374,12 +378,12 @@ class FindS2STAC:
             return False
 
         if not self._no_data_filter(row, image_link):
-            self.__logger.info(f"No data check failed - too much no data")
+            self.__logger.info("No data check failed - too much no data")
             return False
 
         cloud_percent_feature = self._s2_cloudless_filter(row, item)
         if not cloud_percent_feature:
-            self.__logger.info(f"S2Cloudless check failed - too cloudy")
+            self.__logger.info("S2Cloudless check failed - too cloudy")
             return False
 
         self.__logger.info(

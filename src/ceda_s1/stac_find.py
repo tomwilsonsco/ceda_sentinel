@@ -6,10 +6,8 @@ for searching Sentinel-1 ARD data instead of HTML directory scraping.
 """
 
 import logging
-from datetime import datetime
 import geopandas as gpd
-import numpy as np
-from shapely.geometry import shape, box
+from shapely.geometry import shape
 from tqdm import tqdm
 
 from ceda_stac.client import (
@@ -236,11 +234,17 @@ class FindS1STAC:
             # Use item geometry for intersection check
             try:
                 item_geom = shape(item.geometry)
+                # Convert item geometry to the AOI's CRS for accurate intersection
+                item_geom_reprojected = (
+                    gpd.GeoSeries([item_geom], crs="EPSG:4326")
+                    .to_crs(aoi_gdf.crs)
+                    .iloc[0]
+                )
             except Exception as e:
                 self.__logger.error(f"Error reading geometry for item {item.id}: {e}")
                 continue
 
-            intersect_aoi = aoi_gdf[aoi_gdf.within(item_geom)]
+            intersect_aoi = aoi_gdf[aoi_gdf.within(item_geom_reprojected)]
             if intersect_aoi.empty:
                 continue
 
@@ -257,7 +261,9 @@ class FindS1STAC:
                 retained_images[id] = current
 
         if orbits:
-            self.__logger.info(f"Found images for relative orbits {' '.join(orbits)}")
+            self.__logger.info(
+                f"Found images for relative orbits {' '.join(str(o) for o in orbits)}"
+            )
         return retained_images
 
     def get_img_feature_dict(self):
