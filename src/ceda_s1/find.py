@@ -49,15 +49,6 @@ class FindS1:
         self.max_no_data_patch = max_no_data_patch
         self.base_url = "https://data.ceda.ac.uk/neodc/sentinel_ard/data/sentinel_1"
 
-        logging.basicConfig(
-            level=logging.INFO,
-            format="\n%(asctime)s.%(msecs)03d - %(message)s",
-            datefmt="%Y-%m-%d %H:%M:%S",
-            handlers=[
-                logging.FileHandler("s1_image_search.log", mode="w"),
-                logging.StreamHandler(),
-            ],
-        )
         self.__logger = logging.getLogger(__name__)
 
     def _read_aoi_file(self):

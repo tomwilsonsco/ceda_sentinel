@@ -58,15 +58,6 @@ class ImageDownloader:
         if self.gdf.empty:
             raise ValueError("The GeoDataFrame is empty.")
 
-        logging.basicConfig(
-            level=logging.INFO,
-            format="\n%(asctime)s.%(msecs)03d - %(message)s",
-            datefmt="%Y-%m-%d %H:%M:%S",
-            handlers=[
-                logging.FileHandler("image_search.log", mode="w"),
-                logging.StreamHandler(),
-            ],
-        )
         self.__logger = logging.getLogger(__name__)
 
     @staticmethod

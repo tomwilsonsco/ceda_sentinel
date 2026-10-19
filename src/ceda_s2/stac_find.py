@@ -78,15 +78,6 @@ class FindS2STAC:
         self.min_cloud_only = min_cloud_only
         self.stac_url = stac_url
 
-        logging.basicConfig(
-            level=logging.INFO,
-            format="\n%(asctime)s.%(msecs)03d - %(message)s",
-            datefmt="%Y-%m-%d %H:%M:%S",
-            handlers=[
-                logging.FileHandler("image_search.log", mode="w"),
-                logging.StreamHandler(),
-            ],
-        )
         self.__logger = logging.getLogger(__name__)
 
     def _check_id_column(self):

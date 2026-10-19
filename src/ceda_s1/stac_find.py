@@ -64,15 +64,6 @@ class FindS1STAC:
         self.platform = platform
         self.orbit_state = orbit_state
 
-        logging.basicConfig(
-            level=logging.INFO,
-            format="\n%(asctime)s.%(msecs)03d - %(message)s",
-            datefmt="%Y-%m-%d %H:%M:%S",
-            handlers=[
-                logging.FileHandler("s1_image_search.log", mode="w"),
-                logging.StreamHandler(),
-            ],
-        )
         self.__logger = logging.getLogger(__name__)
 
     def _read_aoi_file(self):

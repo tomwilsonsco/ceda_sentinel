@@ -74,15 +74,6 @@ class FindS2:
         self.tile_list = tile_list
         self.min_cloud_only = min_cloud_only
 
-        logging.basicConfig(
-            level=logging.INFO,
-            format="\n%(asctime)s.%(msecs)03d - %(message)s",
-            datefmt="%Y-%m-%d %H:%M:%S",
-            handlers=[
-                logging.FileHandler("image_search.log", mode="w"),
-                logging.StreamHandler(),
-            ],
-        )
         self.__logger = logging.getLogger(__name__)
 
     def _filter_sentinel2_tiles(self):

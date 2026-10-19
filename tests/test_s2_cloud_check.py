@@ -58,9 +58,7 @@ def make_find_s2_stac(aoi_gdf, monkeypatch, cloud_percent):
 
 
 @pytest.fixture(params=[make_find_s2, make_find_s2_stac], ids=["FindS2", "STAC"])
-def make_finder(request, aoi_gdf, monkeypatch, tmp_path):
-    # The constructors write image_search.log to the working directory
-    monkeypatch.chdir(tmp_path)
+def make_finder(request, aoi_gdf, monkeypatch):
     return lambda cloud_percent: request.param(aoi_gdf, monkeypatch, cloud_percent)
 
 

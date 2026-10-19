@@ -10,16 +10,6 @@ import logging
 import concurrent.futures
 from io import BytesIO
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="\n%(asctime)s.%(msecs)03d - %(message)s",
-    datefmt="%Y-%m-%d %H:%M:%S",
-    handlers=[
-        logging.FileHandler("s1_image_search.log", mode="w"),
-        logging.StreamHandler(),
-    ],
-)
-
 
 class S1Downloader:
     """
