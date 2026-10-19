@@ -45,6 +45,7 @@ class FindS2:
         tile_gdf=None,
         tile_list=None,
         min_cloud_only=False,
+        check_buffer=0,
     ):
         """
         Initializes the FindS2 class with the given parameters.
@@ -62,6 +63,9 @@ class FindS2:
             tile_gdf (GeoDataFrame): GeoDataFrame for Sentinel-2 tiles.
             tile_list (list): List of Sentinel-2 tiles intersecting the AOI.
             min_cloud_only (bool): If True, only the image with the minimum cloud cover percentage is kept for each feature.
+            check_buffer (float): Distance in metres to buffer each feature by for the
+                nodata and cloud checks. Useful for small features covering only a few
+                pixels.
         """
         self.aoi = aoi_gdf
         self.start_date = start_date
@@ -75,6 +79,7 @@ class FindS2:
         self.tile_gdf = tile_gdf
         self.tile_list = tile_list
         self.min_cloud_only = min_cloud_only
+        self.check_buffer = check_buffer
         self.read_errors = []
 
         self.__logger = logging.getLogger(__name__)
@@ -309,22 +314,40 @@ class FindS2:
             self._record_read_error(gdf_row, image_link, "bounds", e)
             return False
 
+    def _check_bounds(self, gdf_row):
+        """
+        Returns the bounds used for the nodata and cloud checks of a feature.
+
+        Args:
+            gdf_row (GeoDataFrame row): The AOI feature being checked.
+
+        Returns:
+            tuple: (minx, miny, maxx, maxy) of the feature buffered by check_buffer.
+        """
+        minx, miny, maxx, maxy = gdf_row.geometry.bounds
+        b = self.check_buffer
+        return minx - b, miny - b, maxx + b, maxy + b
+
     def _no_data_filter(self, gdf_row, image_link):
         """
         Filters out images with too much nodata based on the specified percentage threshold.
+
+        Any part of the feature that falls outside the image counts as nodata.
 
         Args:
             gdf_row (GeoDataFrame row): Row of the GeoDataFrame representing an image.
             image_link (str): Path to the raster image file (can be URL or file path).
         Returns:
-            bool: True if the nodata percentage exceeds the threshold, False otherwise.
+            bool: True if the nodata percentage is below the threshold, False otherwise.
         """
-        minx, miny, maxx, maxy = gdf_row.geometry.bounds
+        minx, miny, maxx, maxy = self._check_bounds(gdf_row)
         try:
             with rio.open(image_link) as src:
                 nodata = src.profile["nodata"]
                 window = from_bounds(minx, miny, maxx, maxy, src.transform)
-                window_data = src.read(1, window=window)
+                window_data = src.read(
+                    1, window=window, boundless=True, fill_value=nodata
+                )
                 window_size = window_data.shape[0] * window_data.shape[1]
                 nodata_total = np.sum(window_data == nodata)
                 return nodata_total / window_size * 100 < self.nodata_max
@@ -337,6 +360,9 @@ class FindS2:
         """
         Filters out images with too much cloud cover based on the S2 cloudless product.
 
+        The percentage is of the part of the feature inside the image; coverage is
+        left to the nodata check.
+
         Args:
             gdf_row (GeoDataFrame row): Row of the GeoDataFrame representing an image.
             image_link (str): Path to the raster image file (can be URL or file path).
@@ -347,7 +373,7 @@ class FindS2:
         image_link = image_link.replace(
             "vmsk_sharp_rad_srefdem_stdsref.tif", "clouds.tif"
         )
-        minx, miny, maxx, maxy = gdf_row.geometry.bounds
+        minx, miny, maxx, maxy = self._check_bounds(gdf_row)
         try:
             with rio.open(image_link) as src:
                 window = from_bounds(minx, miny, maxx, maxy, src.transform)

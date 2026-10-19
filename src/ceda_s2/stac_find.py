@@ -49,6 +49,7 @@ class FindS2STAC:
         tile_list=None,
         min_cloud_only=False,
         stac_url="https://api.stac.ceda.ac.uk/",
+        check_buffer=0,
     ):
         """
         Initializes the FindS2STAC class.
@@ -66,6 +67,9 @@ class FindS2STAC:
             tile_list (list): List of Sentinel-2 tiles intersecting the AOI.
             min_cloud_only (bool): If True, only the image with minimum cloud cover is kept per feature.
             stac_url (str): The CEDA STAC API endpoint URL.
+            check_buffer (float): Distance in metres to buffer each feature by for the
+                nodata and cloud checks. Useful for small features covering only a few
+                pixels.
         """
         self.aoi = aoi_gdf
         self.start_date = start_date
@@ -79,6 +83,7 @@ class FindS2STAC:
         self.tile_list = tile_list
         self.min_cloud_only = min_cloud_only
         self.stac_url = stac_url
+        self.check_buffer = check_buffer
         self.read_errors = []
 
         self.__logger = logging.getLogger(__name__)
@@ -282,9 +287,25 @@ class FindS2STAC:
             self._record_read_error(gdf_row, item.id, "bounds", e)
             return False
 
+    def _check_bounds(self, gdf_row):
+        """
+        Returns the bounds used for the nodata and cloud checks of a feature.
+
+        Args:
+            gdf_row (GeoDataFrame row): The AOI feature being checked.
+
+        Returns:
+            tuple: (minx, miny, maxx, maxy) of the feature buffered by check_buffer.
+        """
+        minx, miny, maxx, maxy = gdf_row.geometry.bounds
+        b = self.check_buffer
+        return minx - b, miny - b, maxx + b, maxy + b
+
     def _no_data_filter(self, gdf_row, image_link):
         """
         Filters out images with too much nodata based on the specified percentage threshold.
+
+        Any part of the feature that falls outside the image counts as nodata.
 
         Args:
             gdf_row (GeoDataFrame row): Row of the GeoDataFrame representing an image.
@@ -293,12 +314,14 @@ class FindS2STAC:
         Returns:
             bool: True if the nodata percentage is below the threshold, False otherwise.
         """
-        minx, miny, maxx, maxy = gdf_row.geometry.bounds
+        minx, miny, maxx, maxy = self._check_bounds(gdf_row)
         try:
             with rio.open(image_link) as src:
                 nodata = src.profile["nodata"]
                 window = from_bounds(minx, miny, maxx, maxy, src.transform)
-                window_data = src.read(1, window=window)
+                window_data = src.read(
+                    1, window=window, boundless=True, fill_value=nodata
+                )
                 window_size = window_data.shape[0] * window_data.shape[1]
                 nodata_total = np.sum(window_data == nodata)
                 return nodata_total / window_size * 100 < self.nodata_max
@@ -312,6 +335,8 @@ class FindS2STAC:
         Filters out images with too much cloud cover based on the S2 cloudless product.
 
         Uses the cloud asset href from the STAC item instead of string replacement.
+        The percentage is of the part of the feature inside the image; coverage is
+        left to the nodata check.
 
         Args:
             gdf_row (GeoDataFrame row): Row of the GeoDataFrame representing an image.
@@ -327,7 +352,7 @@ class FindS2STAC:
             self.__logger.warning(f"No cloud asset found for item {item.id}")
             return None
 
-        minx, miny, maxx, maxy = gdf_row.geometry.bounds
+        minx, miny, maxx, maxy = self._check_bounds(gdf_row)
         try:
             with rio.open(cloud_link) as src:
                 window = from_bounds(minx, miny, maxx, maxy, src.transform)
