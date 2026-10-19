@@ -24,6 +24,8 @@ from ceda_stac.client import (
 from rasterio.windows import from_bounds
 from shapely.geometry import shape
 
+from ceda_s2.exceptions import ImageReadError
+
 
 class FindS2STAC:
     """
@@ -77,6 +79,7 @@ class FindS2STAC:
         self.tile_list = tile_list
         self.min_cloud_only = min_cloud_only
         self.stac_url = stac_url
+        self.read_errors = []
 
         self.__logger = logging.getLogger(__name__)
 
@@ -276,6 +279,7 @@ class FindS2STAC:
             return gdf_row.geometry.intersects(item_geom_reprojected)
         except Exception as e:
             self.__logger.error(f"Cannot read item geometry: {e}")
+            self._record_read_error(gdf_row, item.id, "bounds", e)
             return False
 
     def _no_data_filter(self, gdf_row, image_link):
@@ -300,6 +304,7 @@ class FindS2STAC:
                 return nodata_total / window_size * 100 < self.nodata_max
         except Exception as e:
             self.__logger.error(f"Cannot open image {e}")
+            self._record_read_error(gdf_row, image_link, "nodata", e)
             return False
 
     def _s2_cloudless_filter(self, gdf_row, item):
@@ -332,7 +337,27 @@ class FindS2STAC:
                 return float(cloud_issues / window_size * 100)
         except Exception as e:
             self.__logger.error(f"Cannot open cloud mask image {e}")
+            self._record_read_error(gdf_row, cloud_link, "s2cloudless", e)
             return None
+
+    def _record_read_error(self, gdf_row, image_link, check, error):
+        """
+        Records an image check that failed with an error rather than a result.
+
+        Args:
+            gdf_row (GeoDataFrame row): The AOI feature being checked.
+            image_link (str): The image, cloud mask or item that could not be read.
+            check (str): Name of the check that failed.
+            error (Exception): The error raised.
+        """
+        self.read_errors.append(
+            {
+                "feature_id": gdf_row.get(self.id_col),
+                "image_link": image_link,
+                "check": check,
+                "error": repr(error),
+            }
+        )
 
     def _extract_date_from_item(self, item):
         """
@@ -393,9 +418,15 @@ class FindS2STAC:
 
         Returns:
             list: A list of dictionaries containing feature ID, image link, date, and cloud cover.
+
+        Raises:
+            ImageReadError: If every image check failed with a read error. If only
+                some failed, their errors are kept in `self.read_errors`.
         """
         self.__logger.info("Looking for suitable images per feature...")
         result_list = []
+        self.read_errors = []
+        checked = 0
 
         for _, aoi_feature in self.aoi.iterrows():
             current_id = aoi_feature[self.id_col]
@@ -415,6 +446,7 @@ class FindS2STAC:
                     f"Checking {image_link.split('/')[-1]} for feature {current_id}..."
                 )
 
+                checked += 1
                 passed, cloud_percent = self._validate_feature_image(aoi_feature, item)
                 if passed:
                     row_dict = {
@@ -424,6 +456,14 @@ class FindS2STAC:
                         "s2cloudles": cloud_percent,
                     }
                     result_list.append(row_dict)
+
+        if self.read_errors:
+            if len(self.read_errors) == checked:
+                raise ImageReadError(self.read_errors)
+            self.__logger.warning(
+                f"{len(self.read_errors)} of {checked} image checks failed with read "
+                "errors; see read_errors for details."
+            )
 
         return result_list
 
