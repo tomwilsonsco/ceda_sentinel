@@ -12,6 +12,22 @@ this repository to download subsections of image tiles intersecting input featur
 than downloading large whole image tiles. This saves space and can be particularly useful if extracting images to prepare a 
 training dataset for deep learning methods such as UNET.
 
+## Installation
+The packages can be installed with pip, either from a clone of the repository:
+
+```bash
+pip install -e .
+```
+
+or directly from GitHub, for use as a library in another project:
+
+```bash
+pip install "ceda-sentinel @ git+https://github.com/tomwilsonsco/ceda_sentinel"
+```
+
+The search scripts in `src/` and the tests import the installed packages, so install
+the repository before running them.
+
 ## Sentinel 2 Process
 The process initially extracts links to suitable Sentinel 2 images for each input feature. These links are recorded in a column in the 
 in a copy of the input search shapefile or geopackage. The process checks the image is not mostly nodata or cloud covered to 
@@ -73,7 +89,7 @@ It is recommended to review all options by specifying:
 python src/s1_search.py -h
 ```
 ## Docker
-Recommended to use the docker image. Alternatively install the packages in the requirements.txt. To start Docker, in a terminal `cd` to the repository and then run:
+Recommended to use the docker image. Alternatively install the repository with `pip install -e .` (see [Installation](#installation)). Inside a container started this way, run `pip install -e .` from `/app` before running the scripts. To start Docker, in a terminal `cd` to the repository and then run:
 
 ```bash
 docker build . --no-cache --file .devcontainer/Dockerfile -t ceda

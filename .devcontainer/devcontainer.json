@@ -16,7 +16,7 @@
       "ms-python.vscode-pylance",
       "ms-toolsai.jupyter"
   ],
-  "postCreateCommand": "pip install --requirement requirements.txt --no-cache-dir",
+  "postCreateCommand": "pip install --requirement requirements.txt --no-cache-dir && pip install --editable . --no-cache-dir",
   "remoteUser": "root",
   "forwardPorts": [8050],
   "workspaceFolder": "/app",
