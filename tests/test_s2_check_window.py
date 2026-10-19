@@ -12,10 +12,11 @@ import geopandas as gpd
 import numpy as np
 import pytest
 import rasterio as rio
-from ceda_s2 import FindS2, FindS2STAC
-from ceda_stac.client import S2_CLOUD_ASSET
 from rasterio.transform import from_origin
 from shapely.geometry import box
+
+from ceda_s2 import FindS2, FindS2STAC
+from ceda_stac.client import S2_CLOUD_ASSET
 
 # 2 x 2 pixels: rows 4-5, columns 4-5
 SMALL_FEATURE = box(40, 40, 60, 60)

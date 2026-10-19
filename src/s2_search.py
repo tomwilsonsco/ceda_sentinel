@@ -1,13 +1,14 @@
-import logging
 import argparse
-from pathlib import Path
-import geopandas as gpd
-import pandas as pd
 import datetime
-import matplotlib
+import logging
 import re
+from pathlib import Path
 
-from ceda_s2 import FindS2, ImagePlotter, ImageDownloader
+import geopandas as gpd
+import matplotlib
+import pandas as pd
+
+from ceda_s2 import FindS2, ImageDownloader, ImagePlotter
 
 logging.basicConfig(
     level=logging.INFO,
@@ -38,7 +39,7 @@ def valid_date(date_string):
     except ValueError:
         raise argparse.ArgumentTypeError(
             f"Invalid date: '{date_string}'. Expected format: YYYY-MM-DD."
-        )
+        ) from None
 
 
 def compare_date(d1, d2):
@@ -157,12 +158,11 @@ def get_images(
         or "image_link" not in search_features.columns
         or search_features["image_link"].isna().any()
     )
-    if full_search:
-        if "image_link" in search_features.columns:
-            search_features = search_features.drop(
-                columns=["image_link", "image_date", "s2cloudles"]
-            )
-            search_features = search_features[~search_features.geometry.duplicated()]
+    if full_search and "image_link" in search_features.columns:
+        search_features = search_features.drop(
+            columns=["image_link", "image_date", "s2cloudles"]
+        )
+        search_features = search_features[~search_features.geometry.duplicated()]
     if new_search:
         existing_search = None
         if (
@@ -363,9 +363,8 @@ def main():
         compare_date(args.start_date, args.end_date)
 
     band_indices = tuple(args.download_band_indices)
-    if band_indices:
-        if not all(0 < x <= 10 for x in band_indices):
-            raise ValueError("Band index values must be in the range 1-10.")
+    if band_indices and not all(0 < x <= 10 for x in band_indices):
+        raise ValueError("Band index values must be in the range 1-10.")
 
     tile_cloud = float(args.tile_cloud_percent)
     if tile_cloud > 100 or tile_cloud < 0:

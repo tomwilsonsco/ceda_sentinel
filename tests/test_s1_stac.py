@@ -6,7 +6,7 @@ since historical data (pre-2024) is not yet indexed in the STAC API.
 """
 
 import pytest
-import geopandas as gpd
+
 from ceda_s1 import FindS1STAC
 
 
@@ -106,13 +106,8 @@ class TestFindS1STAC:
         # Verify that returned images match the requested orbit
         # (This assumes data exists for orbit 1 in the date range)
         for link in img_links:
-            # Extract orbit number from filename
-            # Format: S1A_YYYYMMDD_ORBIT_..._GB_OSGB_...
-            parts = link.split("/")[-1].split("_")
-            if len(parts) >= 3:
-                orbit_in_url = parts[2]
-                # Note: We can't easily verify this without parsing the full URL structure
-                # but the test ensures the search completes without errors
+            # Filename format: S1A_YYYYMMDD_ORBIT_..._GB_OSGB_...
+            assert int(link.split("/")[-1].split("_")[2]) == 1
 
     def test_stac_platform_filtering(self, aoi_filepath):
         """

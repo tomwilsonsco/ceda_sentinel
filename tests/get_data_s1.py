@@ -1,5 +1,5 @@
 def get_img_list():
-    l = [
+    links = [
         "https://dap.ceda.ac.uk/neodc/sentinel_ard/data/sentinel_1/2018/06/01/S1B_20180601_132_asc_174823_174848_VVVH_G0_GB_OSGB_RTCK_SpkRL.tif",
         "https://dap.ceda.ac.uk/neodc/sentinel_ard/data/sentinel_1/2018/06/01/S1B_20180601_125_desc_063846_063911_VVVH_G0_GB_OSGB_RTCK_SpkRL.tif",
         "https://dap.ceda.ac.uk/neodc/sentinel_ard/data/sentinel_1/2018/06/01/S1B_20180601_132_asc_174913_174938_VVVH_G0_GB_OSGB_RTCK_SpkRL.tif",
@@ -16,8 +16,8 @@ def get_img_list():
         "https://dap.ceda.ac.uk/neodc/sentinel_ard/data/sentinel_1/2018/06/01/S1B_20180601_125_desc_063911_063936_VVVH_G0_GB_OSGB_RTCK_SpkRL.tif",
         "https://dap.ceda.ac.uk/neodc/sentinel_ard/data/sentinel_1/2018/06/01/S1B_20180601_125_desc_063756_063821_VVVH_G0_GB_OSGB_RTCK_SpkRL.tif",
     ]
-    l.sort()
-    return l
+    links.sort()
+    return links
 
 
 def get_feature_links():

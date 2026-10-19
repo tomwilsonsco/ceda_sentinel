@@ -46,7 +46,7 @@ def get_stac_client(url=CEDA_STAC_API_URL):
         client = Client.open(url)
         return client
     except Exception as e:
-        raise Exception(f"Failed to connect to STAC API at {url}: {e}")
+        raise Exception(f"Failed to connect to STAC API at {url}: {e}") from e
 
 
 def format_datetime_range(start_date, end_date):

@@ -1,7 +1,8 @@
 import logging
+from pathlib import Path
+
 import rasterio as rio
 from rasterio.windows import from_bounds
-from pathlib import Path
 
 
 class ImageDownloader:

@@ -34,3 +34,16 @@ Repository = "https://github.com/tomwilsonsco/ceda_sentinel"
 [tool.setuptools.packages.find]
 where = ["src"]
 include = ["ceda_s1*", "ceda_s2*", "ceda_stac*"]
+
+[tool.black]
+line-length = 88
+
+[tool.ruff]
+line-length = 88
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+# pycodestyle, pyflakes, isort, bugbear, pyupgrade, simplify
+select = ["E", "W", "F", "I", "B", "UP", "SIM"]
+# Line length is black's job.
+ignore = ["E501"]

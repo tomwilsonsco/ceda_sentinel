@@ -8,9 +8,10 @@ from types import SimpleNamespace
 
 import geopandas as gpd
 import pytest
+from shapely.geometry import box
+
 from ceda_s2 import FindS2, FindS2STAC
 from ceda_stac.client import S2_COG_ASSET
-from shapely.geometry import box
 
 S2CLOUDLESS_MAX = 10
 IMAGE_LINK = (

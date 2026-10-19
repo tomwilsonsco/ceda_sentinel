@@ -12,10 +12,11 @@ import geopandas as gpd
 import numpy as np
 import pytest
 import rasterio as rio
-from ceda_s2 import FindS2, FindS2STAC, ImageReadError
-from ceda_stac.client import S2_CLOUD_ASSET, S2_COG_ASSET
 from rasterio.transform import from_origin
 from shapely.geometry import box, mapping
+
+from ceda_s2 import FindS2, FindS2STAC, ImageReadError
+from ceda_stac.client import S2_CLOUD_ASSET, S2_COG_ASSET
 
 AOI_BOUNDS = (300000, 700000, 300100, 700100)
 TILE = "T30VVJ"

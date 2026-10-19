@@ -1,10 +1,10 @@
-import rasterio as rio
-from rasterio.windows import from_bounds
-from rasterio.plot import show
-import matplotlib.pyplot as plt
-from matplotlib.widgets import Button
-import numpy as np
 import geopandas as gpd
+import matplotlib.pyplot as plt
+import numpy as np
+import rasterio as rio
+from matplotlib.widgets import Button
+from rasterio.plot import show
+from rasterio.windows import from_bounds
 
 
 class ImagePlotter:
@@ -50,7 +50,7 @@ class ImagePlotter:
         self.link_col = link_col
         self.band_indices = list(band_indices)
         self.feature_col = feature_col
-        self.plot_geom = (plot_geom,)
+        self.plot_geom = plot_geom
         self.geom_buffer = geom_buffer
         self.normalise_min = 0
         self.normalise_max = 150

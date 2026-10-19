@@ -11,6 +11,10 @@ import geopandas as gpd
 import numpy as np
 import pandas as pd
 import rasterio as rio
+from rasterio.windows import from_bounds
+from shapely.geometry import shape
+
+from ceda_s2.exceptions import ImageReadError
 from ceda_stac.client import (
     S2_ARD_COLLECTION,
     S2_COG_ASSET,
@@ -21,10 +25,6 @@ from ceda_stac.client import (
     format_datetime_range,
     get_stac_client,
 )
-from rasterio.windows import from_bounds
-from shapely.geometry import shape
-
-from ceda_s2.exceptions import ImageReadError
 
 
 class FindS2STAC:
@@ -50,6 +50,7 @@ class FindS2STAC:
         min_cloud_only=False,
         stac_url="https://api.stac.ceda.ac.uk/",
         check_buffer=0,
+        client=None,
     ):
         """
         Initializes the FindS2STAC class.
@@ -70,8 +71,11 @@ class FindS2STAC:
             check_buffer (float): Distance in metres to buffer each feature by for the
                 nodata and cloud checks. Useful for small features covering only a few
                 pixels.
+            client (pystac_client.Client, optional): An open STAC client to reuse,
+                for example across searches in a long-running app. If None, a new
+                client is opened from stac_url for each search.
         """
-        self.aoi = aoi_gdf
+        self.aoi = aoi_gdf.copy()
         self.start_date = start_date
         self.end_date = end_date
         self.id_col = id_col
@@ -84,6 +88,7 @@ class FindS2STAC:
         self.min_cloud_only = min_cloud_only
         self.stac_url = stac_url
         self.check_buffer = check_buffer
+        self.client = client
         self.read_errors = []
 
         self.__logger = logging.getLogger(__name__)
@@ -193,7 +198,7 @@ class FindS2STAC:
         Returns:
             list: List of pystac.Item objects matching the search criteria.
         """
-        client = get_stac_client(self.stac_url)
+        client = self.client or get_stac_client(self.stac_url)
         bbox = self._get_aoi_bbox()
         datetime_range = format_datetime_range(self.start_date, self.end_date)
         cql2_filter = self._build_combined_filter()

@@ -145,6 +145,28 @@ When using `--use-stac`, you can still use all existing filtering options:
 - **Cloud cover filtering** (S2): `--tile-cloud-percent 20 --feature-cloud-percent 10`
 - **AOI filtering**: All AOI-based filtering works identically
 
+## Faster remote reads
+The images are read directly from CEDA as cloud optimised geotiffs. These GDAL
+settings stop GDAL listing the remote directory when opening each file and merge
+neighbouring byte-range requests, which can make reads faster:
+
+```bash
+export GDAL_DISABLE_READDIR_ON_OPEN=EMPTY_DIR
+export GDAL_HTTP_MERGE_CONSECUTIVE_RANGES=YES
+```
+
+or, when using the packages from Python:
+
+```python
+import rasterio as rio
+
+with rio.Env(
+    GDAL_DISABLE_READDIR_ON_OPEN="EMPTY_DIR",
+    GDAL_HTTP_MERGE_CONSECUTIVE_RANGES="YES",
+):
+    results = finder.find_image_links()
+```
+
 ## Test script
 An integration test that downloads S1 images for two small features from CEDA and compares with pre-existing outputs was created under `tests/`. To run just cd to the repo in a terminal and run:
 ```bash

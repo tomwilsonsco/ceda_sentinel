@@ -67,7 +67,7 @@ class FindS2:
                 nodata and cloud checks. Useful for small features covering only a few
                 pixels.
         """
-        self.aoi = aoi_gdf
+        self.aoi = aoi_gdf.copy()
         self.start_date = start_date
         self.end_date = end_date
         self.id_col = id_col

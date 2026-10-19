@@ -1,9 +1,10 @@
 import argparse
 import logging
-from ceda_s1 import FindS1, S1Downloader
-from pathlib import Path
 import pickle
 from datetime import datetime
+from pathlib import Path
+
+from ceda_s1 import FindS1, S1Downloader
 
 logging.basicConfig(
     level=logging.INFO,
@@ -23,7 +24,9 @@ def validate_date(date_str):
             raise argparse.ArgumentTypeError("Date cannot be earlier than 2018-01-01.")
         return date_str
     except ValueError:
-        raise argparse.ArgumentTypeError("Invalid date format. Use 'YYYY-MM-DD'.")
+        raise argparse.ArgumentTypeError(
+            "Invalid date format. Use 'YYYY-MM-DD'."
+        ) from None
 
 
 def main():

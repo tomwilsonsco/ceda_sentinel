@@ -1,14 +1,12 @@
-import rasterio as rio
-from rasterio.mask import mask
-from rasterio.features import rasterize
-from rasterio.windows import from_bounds
-from shapely.geometry import box
+import concurrent.futures
+import logging
+from pathlib import Path
+
 import geopandas as gpd
 import numpy as np
-from pathlib import Path
-import logging
-import concurrent.futures
-from io import BytesIO
+import rasterio as rio
+from rasterio.features import rasterize
+from rasterio.windows import from_bounds
 
 
 class S1Downloader:
