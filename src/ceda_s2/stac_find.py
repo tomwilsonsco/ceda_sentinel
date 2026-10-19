@@ -6,23 +6,23 @@ for searching Sentinel-2 ARD data instead of HTML directory scraping.
 """
 
 import logging
-from shapely.geometry import shape
-import geopandas as gpd
-import rasterio as rio
-from rasterio.windows import from_bounds
-import pandas as pd
-import numpy as np
 
+import geopandas as gpd
+import numpy as np
+import pandas as pd
+import rasterio as rio
 from ceda_stac.client import (
-    get_stac_client,
-    format_datetime_range,
-    extract_image_url_from_item,
-    extract_cloud_url_from_item,
-    extract_date_from_item,
-    extract_tile_from_item_id,
     S2_ARD_COLLECTION,
     S2_COG_ASSET,
+    extract_cloud_url_from_item,
+    extract_date_from_item,
+    extract_image_url_from_item,
+    extract_tile_from_item_id,
+    format_datetime_range,
+    get_stac_client,
 )
+from rasterio.windows import from_bounds
+from shapely.geometry import shape
 
 
 class FindS2STAC:
@@ -109,7 +109,7 @@ class FindS2STAC:
         Returns:
             GeoDataFrame: The AOI GeoDataFrame, reprojected to EPSG:27700 if necessary.
         """
-        from shapely.geometry import Polygon, MultiPolygon
+        from shapely.geometry import MultiPolygon, Polygon
 
         # Check if all geometries are of type Polygon
         if not all(
@@ -322,13 +322,14 @@ class FindS2STAC:
             item: A pystac.Item object.
 
         Returns:
-            bool or float: Cloud percentage if below threshold, False otherwise.
+            float or None: Cloud percentage within the feature bounds, or None if
+                the cloud mask cannot be read. The threshold is applied by the caller.
         """
         # Get cloud mask URL from STAC asset
         cloud_link = extract_cloud_url_from_item(item)
         if not cloud_link:
             self.__logger.warning(f"No cloud asset found for item {item.id}")
-            return False
+            return None
 
         minx, miny, maxx, maxy = gdf_row.geometry.bounds
         try:
@@ -337,14 +338,10 @@ class FindS2STAC:
                 window_data = src.read(1, window=window)
                 window_size = window_data.shape[0] * window_data.shape[1]
                 cloud_issues = np.sum((window_data == 1) | (window_data == 2))
-                cloud_percent = cloud_issues / window_size * 100
-                if cloud_percent < self.s2cloudless_max:
-                    return cloud_percent
-                else:
-                    return False
+                return float(cloud_issues / window_size * 100)
         except Exception as e:
             self.__logger.error(f"Cannot open cloud mask image {e}")
-            return False
+            return None
 
     def _extract_date_from_item(self, item):
         """
@@ -367,29 +364,34 @@ class FindS2STAC:
             item: A pystac.Item object.
 
         Returns:
-            bool or int: Cloud percentage if valid, False otherwise.
+            tuple: (passed, cloud_percent). passed is True if the image passes all
+                filters. cloud_percent is the s2cloudless percentage as a float, or
+                None if the cloud check was not reached or the mask could not be read.
         """
         image_link = extract_image_url_from_item(item, S2_COG_ASSET)
         if not image_link:
-            return False
+            return False, None
 
         if not self._img_bounds_filter(row, item):
             self.__logger.info("Bounds check failed - out of bounds")
-            return False
+            return False, None
 
         if not self._no_data_filter(row, image_link):
             self.__logger.info("No data check failed - too much no data")
-            return False
+            return False, None
 
         cloud_percent_feature = self._s2_cloudless_filter(row, item)
-        if not cloud_percent_feature:
+        if cloud_percent_feature is None:
+            self.__logger.info("S2Cloudless check failed - cannot read cloud mask")
+            return False, None
+        if not cloud_percent_feature < self.s2cloudless_max:
             self.__logger.info("S2Cloudless check failed - too cloudy")
-            return False
+            return False, cloud_percent_feature
 
         self.__logger.info(
             f"Image / feature passes all checks. s2cloudless percent {cloud_percent_feature}"
         )
-        return int(cloud_percent_feature)
+        return True, cloud_percent_feature
 
     def _find_images_per_feature(self, items):
         """
@@ -422,13 +424,13 @@ class FindS2STAC:
                     f"Checking {image_link.split('/')[-1]} for feature {current_id}..."
                 )
 
-                valid_cloud_percent = self._validate_feature_image(aoi_feature, item)
-                if valid_cloud_percent:
+                passed, cloud_percent = self._validate_feature_image(aoi_feature, item)
+                if passed:
                     row_dict = {
                         self.id_col: current_id,
                         "image_link": image_link,
                         "image_date": self._extract_date_from_item(item),
-                        "s2cloudles": valid_cloud_percent,
+                        "s2cloudles": cloud_percent,
                     }
                     result_list.append(row_dict)
 

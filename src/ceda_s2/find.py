@@ -1,18 +1,19 @@
 import logging
-import requests
-from requests.exceptions import ReadTimeout
-from bs4 import BeautifulSoup
-import time
 import random
+import re
+import time
 from datetime import datetime, timedelta
-from shapely.geometry import Polygon, MultiPolygon, box
-from fiona.drvsupport import supported_drivers
+
 import geopandas as gpd
+import numpy as np
 import pandas as pd
 import rasterio as rio
+import requests
+from bs4 import BeautifulSoup
+from fiona.drvsupport import supported_drivers
 from rasterio.windows import from_bounds
-import numpy as np
-import re
+from requests.exceptions import ReadTimeout
+from shapely.geometry import MultiPolygon, Polygon, box
 
 
 class FindS2:
@@ -344,7 +345,8 @@ class FindS2:
             gdf_row (GeoDataFrame row): Row of the GeoDataFrame representing an image.
             image_link (str): Path to the raster image file (can be URL or file path).
         Returns:
-            bool: True if the cloud cover percentage exceeds the threshold, False otherwise.
+            float or None: Cloud percentage within the feature bounds, or None if
+                the cloud mask cannot be read. The threshold is applied by the caller.
         """
         image_link = image_link.replace(
             "vmsk_sharp_rad_srefdem_stdsref.tif", "clouds.tif"
@@ -356,15 +358,11 @@ class FindS2:
                 window_data = src.read(1, window=window)
                 window_size = window_data.shape[0] * window_data.shape[1]
                 cloud_issues = np.sum((window_data == 1) | (window_data == 2))
-                cloud_percent = cloud_issues / window_size * 100
-                if cloud_percent < self.s2cloudless_max:
-                    return cloud_percent
-                else:
-                    return False
+                return float(cloud_issues / window_size * 100)
 
         except Exception as e:
             self.__logger.error(f"Cannot open cloud mask image {e}")
-            return False
+            return None
 
     def _extract_date_from_link(self, image_link):
         """
@@ -431,24 +429,29 @@ class FindS2:
             image_link (str): Image link.
 
         Returns:
-            bool: True if the image passes all filters, False otherwise.
+            tuple: (passed, cloud_percent). passed is True if the image passes all
+                filters. cloud_percent is the s2cloudless percentage as a float, or
+                None if the cloud check was not reached or the mask could not be read.
         """
         if not self._img_bounds_filter(row, image_link):
             self.__logger.info("Bounds check failed - out of bounds")
-            return False
+            return False, None
         if not self._no_data_filter(row, image_link):
-            self.__logger.info(f"No data check failed - too much no data")
-            return False
+            self.__logger.info("No data check failed - too much no data")
+            return False, None
 
         cloud_percent_feature = self._s2_cloudless_filter(row, image_link)
-        if not cloud_percent_feature:
-            self.__logger.info(f"S2Cloudless check failed - too cloudy")
-            return False
+        if cloud_percent_feature is None:
+            self.__logger.info("S2Cloudless check failed - cannot read cloud mask")
+            return False, None
+        if not cloud_percent_feature < self.s2cloudless_max:
+            self.__logger.info("S2Cloudless check failed - too cloudy")
+            return False, cloud_percent_feature
 
         self.__logger.info(
             f"Image / feature passes all checks. s2cloudless percent {cloud_percent_feature}"
         )
-        return int(cloud_percent_feature)
+        return True, cloud_percent_feature
 
     def _find_images_per_feature(self, image_links):
         """
@@ -489,15 +492,15 @@ class FindS2:
                 self.__logger.info(
                     f"Checking {img_link.split('/')[-1]} for feature {current_id}..."
                 )
-                valid_cloud_percent = self._validate_feature_image(
+                passed, cloud_percent = self._validate_feature_image(
                     aoi_feature, img_link
                 )
-                if valid_cloud_percent:
+                if passed:
                     row_dict = {
                         self.id_col: current_id,
                         "image_link": img_link,
                         "image_date": self._extract_date_from_link(img_link),
-                        "s2cloudles": valid_cloud_percent,
+                        "s2cloudles": cloud_percent,
                     }
                     result_list.append(row_dict)
         return result_list
