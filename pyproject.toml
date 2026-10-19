@@ -1,0 +1,49 @@
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ceda-sentinel"
+version = "0.1.0"
+description = "Search for and download Sentinel-1 and Sentinel-2 ARD imagery from CEDA."
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.12"
+dependencies = [
+    "beautifulsoup4",
+    "fiona",
+    "geopandas",
+    "lxml",
+    "matplotlib",
+    "numpy",
+    "pandas",
+    "pystac-client",
+    "rasterio",
+    "requests",
+    "scipy",
+    "shapely",
+    "tqdm",
+]
+
+[project.optional-dependencies]
+dev = ["pytest", "pytest-cov"]
+
+[project.urls]
+Repository = "https://github.com/tomwilsonsco/ceda_sentinel"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["ceda_s1*", "ceda_s2*", "ceda_stac*"]
+
+[tool.black]
+line-length = 88
+
+[tool.ruff]
+line-length = 88
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+# pycodestyle, pyflakes, isort, bugbear, pyupgrade, simplify
+select = ["E", "W", "F", "I", "B", "UP", "SIM"]
+# Line length is black's job.
+ignore = ["E501"]

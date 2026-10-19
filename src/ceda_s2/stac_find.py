@@ -6,22 +6,24 @@ for searching Sentinel-2 ARD data instead of HTML directory scraping.
 """
 
 import logging
-from shapely.geometry import shape
+
 import geopandas as gpd
+import numpy as np
+import pandas as pd
 import rasterio as rio
 from rasterio.windows import from_bounds
-import pandas as pd
-import numpy as np
+from shapely.geometry import shape
 
+from ceda_s2.exceptions import ImageReadError
 from ceda_stac.client import (
-    get_stac_client,
-    format_datetime_range,
-    extract_image_url_from_item,
-    extract_cloud_url_from_item,
-    extract_date_from_item,
-    extract_tile_from_item_id,
     S2_ARD_COLLECTION,
     S2_COG_ASSET,
+    extract_cloud_url_from_item,
+    extract_date_from_item,
+    extract_image_url_from_item,
+    extract_tile_from_item_id,
+    format_datetime_range,
+    get_stac_client,
 )
 
 
@@ -47,6 +49,8 @@ class FindS2STAC:
         tile_list=None,
         min_cloud_only=False,
         stac_url="https://api.stac.ceda.ac.uk/",
+        check_buffer=0,
+        client=None,
     ):
         """
         Initializes the FindS2STAC class.
@@ -64,8 +68,14 @@ class FindS2STAC:
             tile_list (list): List of Sentinel-2 tiles intersecting the AOI.
             min_cloud_only (bool): If True, only the image with minimum cloud cover is kept per feature.
             stac_url (str): The CEDA STAC API endpoint URL.
+            check_buffer (float): Distance in metres to buffer each feature by for the
+                nodata and cloud checks. Useful for small features covering only a few
+                pixels.
+            client (pystac_client.Client, optional): An open STAC client to reuse,
+                for example across searches in a long-running app. If None, a new
+                client is opened from stac_url for each search.
         """
-        self.aoi = aoi_gdf
+        self.aoi = aoi_gdf.copy()
         self.start_date = start_date
         self.end_date = end_date
         self.id_col = id_col
@@ -77,16 +87,10 @@ class FindS2STAC:
         self.tile_list = tile_list
         self.min_cloud_only = min_cloud_only
         self.stac_url = stac_url
+        self.check_buffer = check_buffer
+        self.client = client
+        self.read_errors = []
 
-        logging.basicConfig(
-            level=logging.INFO,
-            format="\n%(asctime)s.%(msecs)03d - %(message)s",
-            datefmt="%Y-%m-%d %H:%M:%S",
-            handlers=[
-                logging.FileHandler("image_search.log", mode="w"),
-                logging.StreamHandler(),
-            ],
-        )
         self.__logger = logging.getLogger(__name__)
 
     def _check_id_column(self):
@@ -109,7 +113,7 @@ class FindS2STAC:
         Returns:
             GeoDataFrame: The AOI GeoDataFrame, reprojected to EPSG:27700 if necessary.
         """
-        from shapely.geometry import Polygon, MultiPolygon
+        from shapely.geometry import MultiPolygon, Polygon
 
         # Check if all geometries are of type Polygon
         if not all(
@@ -194,7 +198,7 @@ class FindS2STAC:
         Returns:
             list: List of pystac.Item objects matching the search criteria.
         """
-        client = get_stac_client(self.stac_url)
+        client = self.client or get_stac_client(self.stac_url)
         bbox = self._get_aoi_bbox()
         datetime_range = format_datetime_range(self.start_date, self.end_date)
         cql2_filter = self._build_combined_filter()
@@ -285,11 +289,28 @@ class FindS2STAC:
             return gdf_row.geometry.intersects(item_geom_reprojected)
         except Exception as e:
             self.__logger.error(f"Cannot read item geometry: {e}")
+            self._record_read_error(gdf_row, item.id, "bounds", e)
             return False
+
+    def _check_bounds(self, gdf_row):
+        """
+        Returns the bounds used for the nodata and cloud checks of a feature.
+
+        Args:
+            gdf_row (GeoDataFrame row): The AOI feature being checked.
+
+        Returns:
+            tuple: (minx, miny, maxx, maxy) of the feature buffered by check_buffer.
+        """
+        minx, miny, maxx, maxy = gdf_row.geometry.bounds
+        b = self.check_buffer
+        return minx - b, miny - b, maxx + b, maxy + b
 
     def _no_data_filter(self, gdf_row, image_link):
         """
         Filters out images with too much nodata based on the specified percentage threshold.
+
+        Any part of the feature that falls outside the image counts as nodata.
 
         Args:
             gdf_row (GeoDataFrame row): Row of the GeoDataFrame representing an image.
@@ -298,17 +319,20 @@ class FindS2STAC:
         Returns:
             bool: True if the nodata percentage is below the threshold, False otherwise.
         """
-        minx, miny, maxx, maxy = gdf_row.geometry.bounds
+        minx, miny, maxx, maxy = self._check_bounds(gdf_row)
         try:
             with rio.open(image_link) as src:
                 nodata = src.profile["nodata"]
                 window = from_bounds(minx, miny, maxx, maxy, src.transform)
-                window_data = src.read(1, window=window)
+                window_data = src.read(
+                    1, window=window, boundless=True, fill_value=nodata
+                )
                 window_size = window_data.shape[0] * window_data.shape[1]
                 nodata_total = np.sum(window_data == nodata)
                 return nodata_total / window_size * 100 < self.nodata_max
         except Exception as e:
             self.__logger.error(f"Cannot open image {e}")
+            self._record_read_error(gdf_row, image_link, "nodata", e)
             return False
 
     def _s2_cloudless_filter(self, gdf_row, item):
@@ -316,35 +340,54 @@ class FindS2STAC:
         Filters out images with too much cloud cover based on the S2 cloudless product.
 
         Uses the cloud asset href from the STAC item instead of string replacement.
+        The percentage is of the part of the feature inside the image; coverage is
+        left to the nodata check.
 
         Args:
             gdf_row (GeoDataFrame row): Row of the GeoDataFrame representing an image.
             item: A pystac.Item object.
 
         Returns:
-            bool or float: Cloud percentage if below threshold, False otherwise.
+            float or None: Cloud percentage within the feature bounds, or None if
+                the cloud mask cannot be read. The threshold is applied by the caller.
         """
         # Get cloud mask URL from STAC asset
         cloud_link = extract_cloud_url_from_item(item)
         if not cloud_link:
             self.__logger.warning(f"No cloud asset found for item {item.id}")
-            return False
+            return None
 
-        minx, miny, maxx, maxy = gdf_row.geometry.bounds
+        minx, miny, maxx, maxy = self._check_bounds(gdf_row)
         try:
             with rio.open(cloud_link) as src:
                 window = from_bounds(minx, miny, maxx, maxy, src.transform)
                 window_data = src.read(1, window=window)
                 window_size = window_data.shape[0] * window_data.shape[1]
                 cloud_issues = np.sum((window_data == 1) | (window_data == 2))
-                cloud_percent = cloud_issues / window_size * 100
-                if cloud_percent < self.s2cloudless_max:
-                    return cloud_percent
-                else:
-                    return False
+                return float(cloud_issues / window_size * 100)
         except Exception as e:
             self.__logger.error(f"Cannot open cloud mask image {e}")
-            return False
+            self._record_read_error(gdf_row, cloud_link, "s2cloudless", e)
+            return None
+
+    def _record_read_error(self, gdf_row, image_link, check, error):
+        """
+        Records an image check that failed with an error rather than a result.
+
+        Args:
+            gdf_row (GeoDataFrame row): The AOI feature being checked.
+            image_link (str): The image, cloud mask or item that could not be read.
+            check (str): Name of the check that failed.
+            error (Exception): The error raised.
+        """
+        self.read_errors.append(
+            {
+                "feature_id": gdf_row.get(self.id_col),
+                "image_link": image_link,
+                "check": check,
+                "error": repr(error),
+            }
+        )
 
     def _extract_date_from_item(self, item):
         """
@@ -367,29 +410,34 @@ class FindS2STAC:
             item: A pystac.Item object.
 
         Returns:
-            bool or int: Cloud percentage if valid, False otherwise.
+            tuple: (passed, cloud_percent). passed is True if the image passes all
+                filters. cloud_percent is the s2cloudless percentage as a float, or
+                None if the cloud check was not reached or the mask could not be read.
         """
         image_link = extract_image_url_from_item(item, S2_COG_ASSET)
         if not image_link:
-            return False
+            return False, None
 
         if not self._img_bounds_filter(row, item):
             self.__logger.info("Bounds check failed - out of bounds")
-            return False
+            return False, None
 
         if not self._no_data_filter(row, image_link):
             self.__logger.info("No data check failed - too much no data")
-            return False
+            return False, None
 
         cloud_percent_feature = self._s2_cloudless_filter(row, item)
-        if not cloud_percent_feature:
+        if cloud_percent_feature is None:
+            self.__logger.info("S2Cloudless check failed - cannot read cloud mask")
+            return False, None
+        if not cloud_percent_feature < self.s2cloudless_max:
             self.__logger.info("S2Cloudless check failed - too cloudy")
-            return False
+            return False, cloud_percent_feature
 
         self.__logger.info(
             f"Image / feature passes all checks. s2cloudless percent {cloud_percent_feature}"
         )
-        return int(cloud_percent_feature)
+        return True, cloud_percent_feature
 
     def _find_images_per_feature(self, items):
         """
@@ -400,9 +448,15 @@ class FindS2STAC:
 
         Returns:
             list: A list of dictionaries containing feature ID, image link, date, and cloud cover.
+
+        Raises:
+            ImageReadError: If every image check failed with a read error. If only
+                some failed, their errors are kept in `self.read_errors`.
         """
         self.__logger.info("Looking for suitable images per feature...")
         result_list = []
+        self.read_errors = []
+        checked = 0
 
         for _, aoi_feature in self.aoi.iterrows():
             current_id = aoi_feature[self.id_col]
@@ -422,15 +476,24 @@ class FindS2STAC:
                     f"Checking {image_link.split('/')[-1]} for feature {current_id}..."
                 )
 
-                valid_cloud_percent = self._validate_feature_image(aoi_feature, item)
-                if valid_cloud_percent:
+                checked += 1
+                passed, cloud_percent = self._validate_feature_image(aoi_feature, item)
+                if passed:
                     row_dict = {
                         self.id_col: current_id,
                         "image_link": image_link,
                         "image_date": self._extract_date_from_item(item),
-                        "s2cloudles": valid_cloud_percent,
+                        "s2cloudles": cloud_percent,
                     }
                     result_list.append(row_dict)
+
+        if self.read_errors:
+            if len(self.read_errors) == checked:
+                raise ImageReadError(self.read_errors)
+            self.__logger.warning(
+                f"{len(self.read_errors)} of {checked} image checks failed with read "
+                "errors; see read_errors for details."
+            )
 
         return result_list
 

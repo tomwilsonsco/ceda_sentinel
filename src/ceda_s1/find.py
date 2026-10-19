@@ -1,13 +1,11 @@
 import logging
-import requests
-from requests.exceptions import ReadTimeout
-from bs4 import BeautifulSoup
 from datetime import datetime, timedelta
-import time
-import random
+
 import geopandas as gpd
 import numpy as np
 import rasterio as rio
+import requests
+from bs4 import BeautifulSoup
 from scipy.ndimage import label
 from shapely.geometry import box
 from tqdm import tqdm
@@ -24,7 +22,7 @@ class FindS1:
         start_date,
         end_date,
         aoi_filepath,
-        orbit_numbers=[52, 59, 74, 81, 103, 96, 125, 132, 161, 154, 1, 8, 30, 23],
+        orbit_numbers=(52, 59, 74, 81, 103, 96, 125, 132, 161, 154, 1, 8, 30, 23),
         date_images_list=None,
         aoi_id="OBJECTID",
         max_no_data_patch=10,
@@ -37,7 +35,7 @@ class FindS1:
             end_date (str): The end date for the search in the format 'YYYY-MM-DD'.
             aoi_filepath (str): The filepath to shapefile, geojson or geopackage for area of interest.
             aoi_id (str): The column name in the AOI file to use as the unique ID for search results.
-            orbit_numbers (list): A list of relative orbit numbers to filter results by.
+            orbit_numbers (list or tuple): Relative orbit numbers to filter results by.
             max_no_data_patch (int): If a continuous region of no data pixels is larger than this value, the image is discarded.
         """
         self.start_date = start_date
@@ -49,15 +47,6 @@ class FindS1:
         self.max_no_data_patch = max_no_data_patch
         self.base_url = "https://data.ceda.ac.uk/neodc/sentinel_ard/data/sentinel_1"
 
-        logging.basicConfig(
-            level=logging.INFO,
-            format="\n%(asctime)s.%(msecs)03d - %(message)s",
-            datefmt="%Y-%m-%d %H:%M:%S",
-            handlers=[
-                logging.FileHandler("s1_image_search.log", mode="w"),
-                logging.StreamHandler(),
-            ],
-        )
         self.__logger = logging.getLogger(__name__)
 
     def _read_aoi_file(self):
@@ -140,10 +129,13 @@ class FindS1:
 
             for link in soup.find_all("a", href=True):
                 href = link["href"]
-                if href.endswith("SpkRL.tif?download=1"):
-                    if int(href.split("/")[-1].split("_")[2]) in self.orbit_numbers:
-                        if "GB_OSGB" in href.split("/")[-1]:
-                            img_links.append(href.replace("?download=1", ""))
+                file_name = href.split("/")[-1]
+                if (
+                    href.endswith("SpkRL.tif?download=1")
+                    and int(file_name.split("_")[2]) in self.orbit_numbers
+                    and "GB_OSGB" in file_name
+                ):
+                    img_links.append(href.replace("?download=1", ""))
         return set(img_links)
 
     def _aoi_check_images(self, img_list):

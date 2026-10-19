@@ -1,10 +1,12 @@
+import pickle
 import subprocess
 import sys
-import pickle
 from pathlib import Path
-from get_data_s1 import get_img_list, get_feature_links
+
 import numpy as np
 import pytest
+
+from get_data_s1 import get_feature_links, get_img_list
 
 
 @pytest.fixture

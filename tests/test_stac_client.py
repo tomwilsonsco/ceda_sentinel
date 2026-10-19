@@ -5,21 +5,21 @@ These tests verify the utility functions and constants in the shared STAC client
 """
 
 import pytest
-from datetime import datetime
+
 from ceda_stac.client import (
     CEDA_STAC_API_URL,
     S1_ARD_COLLECTION,
-    S2_ARD_COLLECTION,
     S1_DATA_ASSET,
     S1_METADATA_ASSET,
-    S2_COG_ASSET,
+    S2_ARD_COLLECTION,
     S2_CLOUD_ASSET,
-    format_datetime_range,
-    is_gb_osgb_item,
-    extract_image_url_from_item,
+    S2_COG_ASSET,
     extract_cloud_url_from_item,
     extract_date_from_item,
+    extract_image_url_from_item,
     extract_tile_from_item_id,
+    format_datetime_range,
+    is_gb_osgb_item,
 )
 
 

@@ -6,17 +6,18 @@ for searching Sentinel-1 ARD data instead of HTML directory scraping.
 """
 
 import logging
+
 import geopandas as gpd
 from shapely.geometry import shape
 from tqdm import tqdm
 
 from ceda_stac.client import (
-    get_stac_client,
-    format_datetime_range,
-    is_gb_osgb_item,
-    extract_image_url_from_item,
     S1_ARD_COLLECTION,
     S1_DATA_ASSET,
+    extract_image_url_from_item,
+    format_datetime_range,
+    get_stac_client,
+    is_gb_osgb_item,
 )
 
 
@@ -33,7 +34,7 @@ class FindS1STAC:
         start_date,
         end_date,
         aoi_filepath,
-        orbit_numbers=[52, 59, 74, 81, 103, 96, 125, 132, 161, 154, 1, 8, 30, 23],
+        orbit_numbers=(52, 59, 74, 81, 103, 96, 125, 132, 161, 154, 1, 8, 30, 23),
         aoi_id="OBJECTID",
         max_no_data_patch=10,
         stac_url="https://api.stac.ceda.ac.uk/",
@@ -48,7 +49,7 @@ class FindS1STAC:
             end_date (str): The end date for the search in the format 'YYYY-MM-DD'.
             aoi_filepath (str): The filepath to shapefile, geojson or geopackage for area of interest.
             aoi_id (str): The column name in the AOI file to use as the unique ID for search results.
-            orbit_numbers (list): A list of relative orbit numbers to filter results by.
+            orbit_numbers (list or tuple): Relative orbit numbers to filter results by.
             max_no_data_patch (int): If a continuous region of no data pixels is larger than this value, the image is discarded.
             stac_url (str): The CEDA STAC API endpoint URL.
             platform (str, optional): Filter by platform (e.g., 'sentinel-1a', 'sentinel-1b', 'sentinel-1c').
@@ -64,15 +65,6 @@ class FindS1STAC:
         self.platform = platform
         self.orbit_state = orbit_state
 
-        logging.basicConfig(
-            level=logging.INFO,
-            format="\n%(asctime)s.%(msecs)03d - %(message)s",
-            datefmt="%Y-%m-%d %H:%M:%S",
-            handlers=[
-                logging.FileHandler("s1_image_search.log", mode="w"),
-                logging.StreamHandler(),
-            ],
-        )
         self.__logger = logging.getLogger(__name__)
 
     def _read_aoi_file(self):

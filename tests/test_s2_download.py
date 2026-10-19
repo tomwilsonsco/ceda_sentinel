@@ -17,12 +17,11 @@ writing.
 import socket
 import threading
 from http.server import HTTPServer, SimpleHTTPRequestHandler
-from pathlib import Path
 
+import geopandas as gpd
 import numpy as np
 import pytest
 import rasterio as rio
-import geopandas as gpd
 from rasterio.transform import from_origin
 from shapely.geometry import box
 
@@ -84,9 +83,7 @@ def _make_gdf(url, indices):
     whose first row does not have index 0 (e.g. after filtering/concat).
     """
     geom = box(200, 20, 300, 80)  # within the source raster bounds
-    rows = [
-        {"id": idx, "image_link": url, "geometry": geom} for idx in indices
-    ]
+    rows = [{"id": idx, "image_link": url, "geometry": geom} for idx in indices]
     gdf = gpd.GeoDataFrame(rows, geometry="geometry", crs="EPSG:32630")
     gdf.index = list(indices)
     return gdf

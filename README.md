@@ -12,6 +12,22 @@ this repository to download subsections of image tiles intersecting input featur
 than downloading large whole image tiles. This saves space and can be particularly useful if extracting images to prepare a 
 training dataset for deep learning methods such as UNET.
 
+## Installation
+The packages can be installed with pip, either from a clone of the repository:
+
+```bash
+pip install -e .
+```
+
+or directly from GitHub, for use as a library in another project:
+
+```bash
+pip install "ceda-sentinel @ git+https://github.com/tomwilsonsco/ceda_sentinel"
+```
+
+The search scripts in `src/` and the tests import the installed packages, so install
+the repository before running them.
+
 ## Sentinel 2 Process
 The process initially extracts links to suitable Sentinel 2 images for each input feature. These links are recorded in a column in the 
 in a copy of the input search shapefile or geopackage. The process checks the image is not mostly nodata or cloud covered to 
@@ -73,7 +89,7 @@ It is recommended to review all options by specifying:
 python src/s1_search.py -h
 ```
 ## Docker
-Recommended to use the docker image. Alternatively install the packages in the requirements.txt. To start Docker, in a terminal `cd` to the repository and then run:
+Recommended to use the docker image. Alternatively install the repository with `pip install -e .` (see [Installation](#installation)). Inside a container started this way, run `pip install -e .` from `/app` before running the scripts. To start Docker, in a terminal `cd` to the repository and then run:
 
 ```bash
 docker build . --no-cache --file .devcontainer/Dockerfile -t ceda
@@ -128,6 +144,28 @@ When using `--use-stac`, you can still use all existing filtering options:
 - **Orbit filtering** (S1): `--orbit-numbers 1 125 132`
 - **Cloud cover filtering** (S2): `--tile-cloud-percent 20 --feature-cloud-percent 10`
 - **AOI filtering**: All AOI-based filtering works identically
+
+## Faster remote reads
+The images are read directly from CEDA as cloud optimised geotiffs. These GDAL
+settings stop GDAL listing the remote directory when opening each file and merge
+neighbouring byte-range requests, which can make reads faster:
+
+```bash
+export GDAL_DISABLE_READDIR_ON_OPEN=EMPTY_DIR
+export GDAL_HTTP_MERGE_CONSECUTIVE_RANGES=YES
+```
+
+or, when using the packages from Python:
+
+```python
+import rasterio as rio
+
+with rio.Env(
+    GDAL_DISABLE_READDIR_ON_OPEN="EMPTY_DIR",
+    GDAL_HTTP_MERGE_CONSECUTIVE_RANGES="YES",
+):
+    results = finder.find_image_links()
+```
 
 ## Test script
 An integration test that downloads S1 images for two small features from CEDA and compares with pre-existing outputs was created under `tests/`. To run just cd to the repo in a terminal and run:

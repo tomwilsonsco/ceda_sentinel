@@ -5,9 +5,9 @@ These tests require network access to the CEDA STAC API and use recent data (202
 since historical data may not be fully indexed in the STAC API.
 """
 
-import pytest
 import geopandas as gpd
-import pandas as pd
+import pytest
+
 from ceda_s2 import FindS2STAC
 
 
@@ -123,7 +123,7 @@ class TestFindS2STAC:
             nodata_max=100,
         )
 
-        result_gdf = finder.find_image_links()
+        finder.find_image_links()
 
         # Verify search completes without errors
         # (Results may be empty due to strict cloud cover filter)
